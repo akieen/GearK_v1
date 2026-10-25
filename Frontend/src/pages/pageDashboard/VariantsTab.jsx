@@ -16,14 +16,86 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   const [newSalePrice, setNewSalePrice] = useState('');
   const [newStock, setNewStock] = useState('10');
   const [newWarranty, setNewWarranty] = useState('24');
+  const [newSpecsList, setNewSpecsList] = useState([
+    { key: 'Màu sắc', value: '' },
+    { key: 'Bảo hành', value: '24 tháng' },
+  ]);
   const [submitting, setSubmitting] = useState(false);
 
   // Quick edit variant modal/state
   const [editingVariant, setEditingVariant] = useState(null);
+  const [editVariantName, setEditVariantName] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editSalePrice, setEditSalePrice] = useState('');
   const [editStock, setEditStock] = useState('');
+  const [editWarranty, setEditWarranty] = useState('12');
+  const [editSpecsList, setEditSpecsList] = useState([]);
   const [updating, setUpdating] = useState(false);
+
+  // Quick Presets for specifications
+  const presets = {
+    mouse: [
+      { key: 'Màu sắc', value: 'Đen' },
+      { key: 'Cảm biến', value: 'Quang học Focus Pro 35K' },
+      { key: 'DPI tối đa', value: '35.000 DPI' },
+      { key: 'Kết nối', value: 'Không dây 2.4GHz / Type-C' },
+      { key: 'Trọng lượng', value: '54g' },
+      { key: 'Thời lượng pin', value: '95 giờ' },
+    ],
+    keyboard: [
+      { key: 'Màu sắc', value: 'Đen' },
+      { key: 'Loại Switch', value: 'ROG RX Red Linear' },
+      { key: 'Layout', value: 'TKL 87 phím' },
+      { key: 'Kết nối', value: 'Có dây Type-C tháo rời' },
+      { key: 'Đèn LED', value: 'RGB Aura Sync 16.8 triệu màu' },
+      { key: 'Keycap', value: 'PBT Doubleshot' },
+    ],
+    headphone: [
+      { key: 'Màu sắc', value: 'Đen' },
+      { key: 'Kiểu kết nối', value: 'Wireless 2.4GHz / Bluetooth 5.3' },
+      { key: 'Đường kính Driver', value: '50mm Neodymium' },
+      { key: 'Microphone', value: 'Tháo rời, chống ồn đa hướng' },
+      { key: 'Thời lượng pin', value: '50 giờ' },
+    ],
+    monitor: [
+      { key: 'Kích thước', value: '27 inch' },
+      { key: 'Độ phân giải', value: '2K QHD (2560 x 1440)' },
+      { key: 'Tần số quét', value: '180Hz' },
+      { key: 'Tấm nền', value: 'Fast IPS' },
+      { key: 'Thời gian phản hồi', value: '1ms GTG' },
+      { key: 'Cổng kết nối', value: '2x HDMI 2.0, 1x DisplayPort 1.4' },
+    ],
+  };
+
+  const addSpecRow = (setter) => {
+    setter((prev) => [...prev, { key: '', value: '' }]);
+  };
+
+  const removeSpecRow = (setter, idx) => {
+    setter((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateSpecRow = (setter, idx, field, val) => {
+    setter((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: val } : item))
+    );
+  };
+
+  const applyPreset = (setter, type) => {
+    if (presets[type]) {
+      setter(presets[type].map((item) => ({ ...item })));
+    }
+  };
+
+  const parseSpecsToObj = (list) => {
+    const obj = {};
+    list.forEach((item) => {
+      if (item.key && item.key.trim()) {
+        obj[item.key.trim()] = item.value ? item.value.trim() : '';
+      }
+    });
+    return Object.keys(obj).length > 0 ? obj : null;
+  };
 
   // Auto select first product if available or update when targetProductId changes
   useEffect(() => {
@@ -71,16 +143,21 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
         sale_price: newSalePrice ? parseFloat(newSalePrice) : null,
         stock: parseInt(newStock) || 0,
         warranty_months: parseInt(newWarranty) || 12,
+        specifications: parseSpecsToObj(newSpecsList),
       };
 
       const res = await productApi.addVariant(selectedProductId, payload);
       if (res.success) {
-        toast.success(`Đã thêm biến thể "${newVariantName.trim()}"!`);
+        toast.success(`Đã thêm biến thể "${newVariantName.trim()}" kèm thông số!`);
         setNewSku('');
         setNewVariantName('');
         setNewPrice('');
         setNewSalePrice('');
         setNewStock('10');
+        setNewSpecsList([
+          { key: 'Màu sắc', value: '' },
+          { key: 'Bảo hành', value: '24 tháng' },
+        ]);
         setShowAddForm(false);
         fetchVariants(selectedProductId);
       }
@@ -93,9 +170,29 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
 
   const handleOpenEdit = (v) => {
     setEditingVariant(v);
+    setEditVariantName(v.variant_name);
     setEditPrice(v.price);
     setEditSalePrice(v.sale_price || '');
     setEditStock(v.stock);
+    setEditWarranty(v.warranty_months || 12);
+
+    let parsed = v.specifications;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (e) {
+        parsed = null;
+      }
+    }
+    if (parsed && typeof parsed === 'object') {
+      const list = Object.entries(parsed).map(([k, val]) => ({
+        key: k,
+        value: typeof val === 'object' ? JSON.stringify(val) : String(val),
+      }));
+      setEditSpecsList(list.length > 0 ? list : [{ key: '', value: '' }]);
+    } else {
+      setEditSpecsList([{ key: '', value: '' }]);
+    }
   };
 
   const handleUpdateVariant = async (e) => {
@@ -105,14 +202,17 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
     setUpdating(true);
     try {
       const payload = {
+        variant_name: editVariantName.trim() || editingVariant.variant_name,
         price: parseFloat(editPrice),
         sale_price: editSalePrice ? parseFloat(editSalePrice) : null,
         stock: parseInt(editStock),
+        warranty_months: parseInt(editWarranty) || 12,
+        specifications: parseSpecsToObj(editSpecsList),
       };
 
       const res = await productApi.updateVariant(editingVariant.variant_id, payload);
       if (res.success) {
-        toast.success(`Đã cập nhật biến thể #${editingVariant.sku}`);
+        toast.success(`Đã cập nhật biến thể #${editingVariant.sku} thành công!`);
         setEditingVariant(null);
         fetchVariants(selectedProductId);
       }
@@ -139,6 +239,182 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
     } catch (err) {
       toast.error(err.message || 'Lỗi xóa biến thể');
     }
+  };
+
+  // Reusable Specifications Editor UI
+  const renderSpecsEditor = (specsList, setSpecsList) => {
+    return (
+      <div
+        style={{
+          marginTop: 14,
+          padding: 14,
+          backgroundColor: '#F9FAFB',
+          borderRadius: 8,
+          border: '1px solid #E5E7EB',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 10,
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
+          <div>
+            <label
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                color: '#111827',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span>⚡ Thông số kỹ thuật (Cột `specifications` JSON)</span>
+            </label>
+            <span style={{ fontSize: 11.5, color: '#6B7280' }}>
+              Nhập các cặp Tên thông số - Giá trị. Lưu tự động dưới dạng JSON trong MySQL.
+            </span>
+          </div>
+
+          {/* Quick Presets */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Mẫu nhanh:</span>
+            <button
+              type="button"
+              onClick={() => applyPreset(setSpecsList, 'mouse')}
+              style={{
+                fontSize: 11,
+                padding: '3px 8px',
+                borderRadius: 4,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🖱️ Chuột
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(setSpecsList, 'keyboard')}
+              style={{
+                fontSize: 11,
+                padding: '3px 8px',
+                borderRadius: 4,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ⌨️ Bàn phím
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(setSpecsList, 'headphone')}
+              style={{
+                fontSize: 11,
+                padding: '3px 8px',
+                borderRadius: 4,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🎧 Tai nghe
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(setSpecsList, 'monitor')}
+              style={{
+                fontSize: 11,
+                padding: '3px 8px',
+                borderRadius: 4,
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🖥️ Màn hình
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Key-Value Rows */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {specsList.map((item, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Tên thông số (VD: Màu sắc, DPI, Switch...)"
+                value={item.key}
+                onChange={(e) => updateSpecRow(setSpecsList, idx, 'key', e.target.value)}
+                className="form-input"
+                style={{ flex: 1, height: 36, fontSize: 13, backgroundColor: '#FFFFFF' }}
+              />
+              <span style={{ fontWeight: 800, color: '#9CA3AF' }}>:</span>
+              <input
+                type="text"
+                placeholder="Giá trị (VD: Đen nhám, 35.000 DPI, ROG RX Red...)"
+                value={item.value}
+                onChange={(e) => updateSpecRow(setSpecsList, idx, 'value', e.target.value)}
+                className="form-input"
+                style={{ flex: 1.5, height: 36, fontSize: 13, backgroundColor: '#FFFFFF' }}
+              />
+              <button
+                type="button"
+                onClick={() => removeSpecRow(setSpecsList, idx)}
+                style={{
+                  padding: '6px',
+                  color: '#EF4444',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                  border: 'none',
+                  background: 'none',
+                }}
+                title="Xóa thông số này"
+              >
+                <Icons.Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => addSpecRow(setSpecsList)}
+            style={{
+              fontSize: 12.5,
+              padding: '5px 12px',
+              borderRadius: 6,
+              backgroundColor: '#EFF6FF',
+              color: '#2563EB',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: '1px solid #BFDBFE',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <Icons.Plus size={14} />
+            <span>Thêm dòng thông số</span>
+          </button>
+
+          <span style={{ fontSize: 11.5, color: '#6B7280', fontFamily: 'monospace' }}>
+            Đã nhập: {specsList.filter((s) => s.key.trim()).length} thông số
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -209,7 +485,13 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
             + Thêm biến thể mới cho: {productDetail?.product_name}
           </h4>
           <form onSubmit={handleCreateVariant}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 12,
+              }}
+            >
               <div className="form-group">
                 <label className="form-label">Tên biến thể *</label>
                 <input
@@ -283,7 +565,10 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
               </div>
             </div>
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            {/* Specifications Key-Value Builder */}
+            {renderSpecsEditor(newSpecsList, setNewSpecsList)}
+
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
@@ -353,6 +638,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
               <tr>
                 <th>SKU</th>
                 <th>Tên biến thể</th>
+                <th>Thông số kỹ thuật (JSON Specifications)</th>
                 <th>Giá niêm yết</th>
                 <th>Giá khuyến mãi</th>
                 <th>Tồn kho</th>
@@ -363,146 +649,216 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
             <tbody>
               {(!productDetail?.variants || productDetail.variants.length === 0) ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
                     Chưa có biến thể nào cho sản phẩm này
                   </td>
                 </tr>
               ) : (
-                productDetail.variants.map((v) => (
-                  <tr key={v.variant_id}>
-                    <td style={{ fontWeight: 800, color: 'var(--primary)', fontFamily: 'monospace' }}>
-                      {v.sku}
-                    </td>
-                    <td style={{ fontWeight: 700 }}>
-                      {v.variant_name}
-                    </td>
-                    <td style={{ fontWeight: 600 }}>
-                      {formatPrice(v.price)}
-                    </td>
-                    <td>
-                      {v.sale_price ? (
-                        <span style={{ fontWeight: 700, color: '#EF4444' }}>
-                          {formatPrice(v.sale_price)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#9CA3AF', fontSize: 12 }}>Không có</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          fontSize: 12,
-                          backgroundColor: v.stock <= 5 ? '#FEE2E2' : '#ECFDF5',
-                          color: v.stock <= 5 ? '#EF4444' : '#059669',
-                        }}
-                      >
-                        {v.stock} chiếc {v.stock <= 5 && '⚠️'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12.5 }}>
-                      {v.warranty_months} tháng
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          onClick={() => handleOpenEdit(v)}
+                productDetail.variants.map((v) => {
+                  let specsObj = v.specifications;
+                  if (typeof specsObj === 'string') {
+                    try {
+                      specsObj = JSON.parse(specsObj);
+                    } catch (e) {
+                      specsObj = null;
+                    }
+                  }
+                  const specEntries =
+                    specsObj && typeof specsObj === 'object'
+                      ? Object.entries(specsObj)
+                      : [];
+
+                  return (
+                    <tr key={v.variant_id}>
+                      <td style={{ fontWeight: 800, color: 'var(--primary)', fontFamily: 'monospace' }}>
+                        {v.sku}
+                      </td>
+                      <td style={{ fontWeight: 700 }}>
+                        {v.variant_name}
+                      </td>
+                      {/* Specifications column */}
+                      <td>
+                        {specEntries.length > 0 ? (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 300 }}>
+                            {specEntries.map(([k, val], i) => (
+                              <span
+                                key={i}
+                                style={{
+                                  fontSize: 11,
+                                  backgroundColor: '#F3F4F6',
+                                  color: '#374151',
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  border: '1px solid #E5E7EB',
+                                  display: 'inline-flex',
+                                  gap: 3,
+                                }}
+                              >
+                                <strong style={{ color: '#1F2937' }}>{k}:</strong> {String(val)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9CA3AF', fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>
+                        {formatPrice(v.price)}
+                      </td>
+                      <td>
+                        {v.sale_price ? (
+                          <span style={{ fontWeight: 700, color: '#EF4444' }}>
+                            {formatPrice(v.sale_price)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#9CA3AF', fontSize: 12 }}>Không có</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
                           style={{
-                            color: '#2563EB',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            padding: '4px 8px',
-                            backgroundColor: '#EFF6FF',
+                            fontWeight: 800,
+                            padding: '2px 8px',
                             borderRadius: 4,
+                            fontSize: 12,
+                            backgroundColor: v.stock <= 5 ? '#FEE2E2' : '#ECFDF5',
+                            color: v.stock <= 5 ? '#EF4444' : '#059669',
                           }}
                         >
-                          Sửa giá / kho
-                        </button>
-                        {isAdmin && (
+                          {v.stock} chiếc {v.stock <= 5 && '⚠️'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 12.5 }}>
+                        {v.warranty_months} tháng
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
                           <button
-                            onClick={() => handleDeleteVariant(v.variant_id, v.variant_name)}
-                            style={{ color: '#EF4444', padding: 4 }}
-                            title="Xóa biến thể"
+                            onClick={() => handleOpenEdit(v)}
+                            style={{
+                              color: '#2563EB',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              padding: '4px 8px',
+                              backgroundColor: '#EFF6FF',
+                              borderRadius: 4,
+                            }}
                           >
-                            <Icons.Trash2 size={16} />
+                            Sửa thông số / giá
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteVariant(v.variant_id, v.variant_name)}
+                              style={{ color: '#EF4444', padding: 4 }}
+                              title="Xóa biến thể"
+                            >
+                              <Icons.Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Quick Edit Variant Modal */}
+      {/* Edit Variant Modal (Includes Specifications Editor) */}
       {editingVariant && (
         <div className="modal-overlay" onClick={() => setEditingVariant(null)}>
           <div
             className="modal-card"
-            style={{ maxWidth: 420 }}
+            style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
-              <h3 className="modal-title">Cập nhật: {editingVariant.variant_name}</h3>
+              <h3 className="modal-title">Cập nhật biến thể: {editingVariant.sku}</h3>
               <button onClick={() => setEditingVariant(null)}>
                 <Icons.X size={20} />
               </button>
             </div>
             <div className="modal-body">
               <form onSubmit={handleUpdateVariant}>
-                <div className="form-group">
-                  <label className="form-label">SKU</label>
-                  <input
-                    type="text"
-                    disabled
-                    className="form-input"
-                    value={editingVariant.sku}
-                    style={{ backgroundColor: '#F3F4F6' }}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Mã SKU</label>
+                    <input
+                      type="text"
+                      disabled
+                      className="form-input"
+                      value={editingVariant.sku}
+                      style={{ backgroundColor: '#F3F4F6' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Tên biến thể *</label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      value={editVariantName}
+                      onChange={(e) => setEditVariantName(e.target.value)}
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Giá niêm yết (₫) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="1000"
-                    className="form-input"
-                    value={editPrice}
-                    onChange={(e) => setEditPrice(e.target.value)}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                  <div className="form-group">
+                    <label className="form-label">Giá niêm yết (₫) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="1000"
+                      className="form-input"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Giá khuyến mãi (₫)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      className="form-input"
+                      placeholder="Trống nếu không giảm"
+                      value={editSalePrice}
+                      onChange={(e) => setEditSalePrice(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Tồn kho *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      className="form-input"
+                      value={editStock}
+                      onChange={(e) => setEditStock(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Bảo hành (tháng)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="form-input"
+                      value={editWarranty}
+                      onChange={(e) => setEditWarranty(e.target.value)}
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Giá khuyến mãi (₫)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    className="form-input"
-                    placeholder="Để trống nếu không giảm"
-                    value={editSalePrice}
-                    onChange={(e) => setEditSalePrice(e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Số lượng tồn kho *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="form-input"
-                    value={editStock}
-                    onChange={(e) => setEditStock(e.target.value)}
-                  />
-                </div>
+                {/* Edit Specifications */}
+                {renderSpecsEditor(editSpecsList, setEditSpecsList)}
 
                 <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                   <button
@@ -518,7 +874,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
                     style={{
                       backgroundColor: 'var(--primary)',
                       color: '#FFFFFF',
-                      padding: '8px 20px',
+                      padding: '8px 24px',
                       borderRadius: 6,
                       fontWeight: 700,
                     }}

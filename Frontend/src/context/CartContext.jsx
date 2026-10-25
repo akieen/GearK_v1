@@ -138,16 +138,22 @@ export const CartProvider = ({ children }) => {
   };
 
   // Toggle wishlist
-  const toggleWishlist = async (productId) => {
+  const toggleWishlist = async (productId, variantId = null) => {
     if (!token) {
       toast.info('Vui lòng đăng nhập để lưu sản phẩm yêu thích!');
       openAuthModal('login');
       return false;
     }
     try {
-      const res = await wishlistApi.toggleWishlist(productId);
+      const res = await wishlistApi.toggleWishlist({
+        product_id: productId,
+        variant_id: variantId,
+      });
       if (res.success) {
-        const isAdded = res.message?.includes('thêm') || res.data?.action === 'added';
+        const isAdded =
+          res.data?.in_wishlist !== undefined
+            ? res.data.in_wishlist
+            : res.message?.includes('thêm') || res.data?.action === 'added';
         if (isAdded) {
           toast.success('Đã lưu vào danh sách yêu thích ❤️');
         } else {

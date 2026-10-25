@@ -415,6 +415,25 @@ async function deleteProduct(req, res, next) {
   }
 }
 
+// Helper to safely format specifications for MySQL JSON column
+function normalizeSpecifications(specifications) {
+  if (specifications === undefined || specifications === null || specifications === '') {
+    return null;
+  }
+  if (typeof specifications === 'object') {
+    return JSON.stringify(specifications);
+  }
+  if (typeof specifications === 'string') {
+    try {
+      JSON.parse(specifications);
+      return specifications;
+    } catch (e) {
+      return JSON.stringify({ 'Thông số': specifications });
+    }
+  }
+  return null;
+}
+
 // [POST] /api/products/:id/variants (Admin only)
 async function addVariant(req, res, next) {
   try {
@@ -426,7 +445,7 @@ async function addVariant(req, res, next) {
     }
 
     const autoSku = sku || `SKU-${id}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
-    const specs = specifications ? JSON.stringify(specifications) : null;
+    const specs = normalizeSpecifications(specifications);
 
     const [result] = await pool.query(
       `INSERT INTO product_variants (product_id, sku, variant_name, specifications, price, sale_price, stock, warranty_months)
@@ -451,7 +470,9 @@ async function updateVariant(req, res, next) {
       return errorResponse(res, 'Phiên bản không tồn tại', 404);
     }
 
-    const specs = specifications !== undefined ? (specifications ? JSON.stringify(specifications) : null) : existing[0].specifications;
+    const specs = specifications !== undefined 
+      ? normalizeSpecifications(specifications) 
+      : existing[0].specifications;
 
     await pool.query(
       `UPDATE product_variants SET

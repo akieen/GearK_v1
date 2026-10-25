@@ -102,13 +102,17 @@ function AppContent() {
     }
   };
 
+  const isAdminRoute = currentRoute === 'admin' || currentRoute.startsWith('admin');
+
   return (
     <>
-      <Header
-        onNavigate={navigate}
-        currentRoute={currentRoute}
-        categories={categories}
-      />
+      {!isAdminRoute && (
+        <Header
+          onNavigate={navigate}
+          currentRoute={currentRoute}
+          categories={categories}
+        />
+      )}
 
       <main style={{ flex: 1 }}>
         {currentRoute === 'home' && (
@@ -174,7 +178,7 @@ function AppContent() {
         )}
       </main>
 
-      <Footer />
+      {!isAdminRoute && <Footer />}
 
       {/* Global Modals & Drawers */}
       <CartDrawer onNavigate={navigate} />

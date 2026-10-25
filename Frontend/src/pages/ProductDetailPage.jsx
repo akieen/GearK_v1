@@ -249,7 +249,7 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
             </span>
 
             <button
-              onClick={() => toggleWishlist(product.product_id)}
+              onClick={() => toggleWishlist(product.product_id, selectedVariant?.variant_id)}
               style={{
                 display: 'flex',
                 alignItems: 'center',

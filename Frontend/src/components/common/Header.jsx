@@ -2,8 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { productApi } from '../../api/productApi';
+import { categoryApi, brandApi } from '../../api/categoryApi';
 import { formatPrice } from '../../utils/formatters';
 import Icons from './Icons';
+
+// Helper: map category slug / name to appropriate Icon
+const getCategoryIcon = (slug = '', name = '') => {
+  const text = `${slug} ${name}`.toLowerCase();
+  if (text.includes('phim') || text.includes('key')) return <Icons.Keyboard size={18} />;
+  if (text.includes('chuot') || text.includes('mouse')) return <Icons.Mouse size={18} />;
+  if (text.includes('tai-nghe') || text.includes('tai nghe') || text.includes('headphone') || text.includes('audio') || text.includes('loa')) {
+    return <Icons.Headphones size={18} />;
+  }
+  if (text.includes('man-hinh') || text.includes('man hinh') || text.includes('monitor') || text.includes('display')) {
+    return <Icons.Monitor size={18} />;
+  }
+  if (text.includes('laptop')) return <Icons.Laptop size={18} />;
+  if (text.includes('pc') || text.includes('cpu') || text.includes('vga') || text.includes('main') || text.includes('case')) {
+    return <Icons.Cpu size={18} />;
+  }
+  return <Icons.Package size={18} />;
+};
+
+const priceFilters = [
+  { label: 'Dưới 1 triệu', max: 1000000 },
+  { label: 'Từ 1 - 2 triệu', min: 1000000, max: 2000000 },
+  { label: 'Từ 2 - 4 triệu', min: 2000000, max: 4000000 },
+  { label: 'Trên 4 triệu', min: 4000000 },
+];
 
 export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
   const { user, isAdmin, isStaff, logout, openAuthModal, quickLogin } = useAuth();
@@ -15,10 +41,18 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  // Category Mega Menu State
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [treeCategories, setTreeCategories] = useState([]);
+  const [brandsList, setBrandsList] = useState([]);
+  const [activeCategoryId, setActiveCategoryId] = useState(null);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
   const searchRef = useRef(null);
   const userMenuRef = useRef(null);
+  const categoryMenuRef = useRef(null);
 
-  // Close dropdowns when clicking outside
+  // Close dropdowns when clicking outside or pressing Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
@@ -27,10 +61,98 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
         setIsUserMenuOpen(false);
       }
+      if (categoryMenuRef.current && !categoryMenuRef.current.contains(e.target)) {
+        setIsCategoryMenuOpen(false);
+      }
     };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsCategoryMenuOpen(false);
+        setIsSearchOpen(false);
+        setIsUserMenuOpen(false);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
+
+  // Fetch hierarchical categories and brands from database
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDropdownData = async () => {
+      try {
+        setLoadingCategories(true);
+        const [catRes, brandRes] = await Promise.all([
+          categoryApi.getCategories(true),
+          brandApi.getBrands(),
+        ]);
+
+        if (isMounted) {
+          if (catRes.success && Array.isArray(catRes.data) && catRes.data.length > 0) {
+            setTreeCategories(catRes.data);
+            setActiveCategoryId((prev) => prev || catRes.data[0].category_id);
+          } else if (categories && categories.length > 0) {
+            setTreeCategories(categories);
+            setActiveCategoryId((prev) => prev || categories[0].category_id);
+          }
+
+          if (brandRes.success && Array.isArray(brandRes.data)) {
+            setBrandsList(brandRes.data);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi nạp dữ liệu danh mục cho dropdown:', err);
+        if (isMounted && categories && categories.length > 0) {
+          setTreeCategories(categories);
+          setActiveCategoryId((prev) => prev || categories[0].category_id);
+        }
+      } finally {
+        if (isMounted) setLoadingCategories(false);
+      }
+    };
+
+    fetchDropdownData();
+    return () => {
+      isMounted = false;
+    };
+  }, [categories]);
+
+  // Keep activeCategoryId pointing to a valid category
+  useEffect(() => {
+    if (treeCategories.length > 0) {
+      const exists = treeCategories.some((c) => c.category_id === activeCategoryId);
+      if (!exists) {
+        setActiveCategoryId(treeCategories[0].category_id);
+      }
+    }
+  }, [treeCategories, activeCategoryId]);
+
+  const activeCategory =
+    treeCategories.find((c) => c.category_id === activeCategoryId) || treeCategories[0];
+
+  const handleCategoryClick = (slug) => {
+    setIsCategoryMenuOpen(false);
+    onNavigate(`products?category=${slug}`);
+  };
+
+  const handleBrandClick = (catSlug, brandSlug) => {
+    setIsCategoryMenuOpen(false);
+    onNavigate(`products?category=${catSlug}&brand=${brandSlug}`);
+  };
+
+  const handlePriceFilter = (catSlug, min, max) => {
+    setIsCategoryMenuOpen(false);
+    let url = `products?category=${catSlug}`;
+    if (min) url += `&min_price=${min}`;
+    if (max) url += `&max_price=${max}`;
+    onNavigate(url);
+  };
 
   // Live search debounce
   useEffect(() => {
@@ -142,14 +264,206 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
             </div>
           </a>
 
-          {/* Category Toggle */}
-          <button
-            className="category-btn"
-            onClick={() => onNavigate('products')}
-          >
-            <Icons.Menu size={18} />
-            <span>DANH MỤC</span>
-          </button>
+          {/* Category Dropdown (GEARVN Mega Menu Style) */}
+          <div className="category-dropdown-wrapper" ref={categoryMenuRef}>
+            <button
+              type="button"
+              className={`category-btn ${isCategoryMenuOpen ? 'active' : ''}`}
+              onClick={() => setIsCategoryMenuOpen(!isCategoryMenuOpen)}
+              aria-expanded={isCategoryMenuOpen}
+              aria-label="Danh mục sản phẩm"
+            >
+              {isCategoryMenuOpen ? <Icons.X size={18} /> : <Icons.Menu size={18} />}
+              <span>DANH MỤC</span>
+              <Icons.ChevronDown
+                size={14}
+                className={`category-btn-arrow ${isCategoryMenuOpen ? 'rotated' : ''}`}
+              />
+            </button>
+
+            {/* Mega Dropdown Panel */}
+            {isCategoryMenuOpen && (
+              <div className="category-mega-dropdown">
+                {/* Left Panel: List of Categories */}
+                <div className="category-mega-sidebar">
+                  {loadingCategories && treeCategories.length === 0 ? (
+                    <div className="category-loading-placeholder">
+                      {[1, 2, 3, 4].map((n) => (
+                        <div key={n} className="category-skeleton-item" />
+                      ))}
+                    </div>
+                  ) : treeCategories.length === 0 ? (
+                    <div className="category-empty-text">Đang tải danh mục...</div>
+                  ) : (
+                    <div className="category-sidebar-list">
+                      {treeCategories.map((cat) => {
+                        const isActive =
+                          activeCategory && activeCategory.category_id === cat.category_id;
+                        return (
+                          <div
+                            key={cat.category_id}
+                            className={`category-sidebar-item ${isActive ? 'active' : ''}`}
+                            onMouseEnter={() => setActiveCategoryId(cat.category_id)}
+                            onClick={() => handleCategoryClick(cat.slug)}
+                          >
+                            <span className="category-sidebar-icon">
+                              {getCategoryIcon(cat.slug, cat.category_name)}
+                            </span>
+                            <span className="category-sidebar-name">{cat.category_name}</span>
+                            {cat.product_count !== undefined && cat.product_count > 0 && (
+                              <span className="category-sidebar-count">{cat.product_count}</span>
+                            )}
+                            <Icons.ChevronRight size={14} className="category-sidebar-arrow" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div
+                    className="category-sidebar-footer"
+                    onClick={() => {
+                      setIsCategoryMenuOpen(false);
+                      onNavigate('products');
+                    }}
+                  >
+                    <span>Xem tất cả sản phẩm</span>
+                    <Icons.ChevronRight size={14} />
+                  </div>
+                </div>
+
+                {/* Right Panel: Active Category Details & Sub-filters */}
+                {activeCategory ? (
+                  <div className="category-mega-content">
+                    <div className="category-mega-header">
+                      <h3 className="category-mega-title">
+                        {getCategoryIcon(activeCategory.slug, activeCategory.category_name)}
+                        <span>{activeCategory.category_name}</span>
+                      </h3>
+                      <button
+                        type="button"
+                        className="category-mega-view-all"
+                        onClick={() => handleCategoryClick(activeCategory.slug)}
+                      >
+                        <span>Xem tất cả</span>
+                        <Icons.ChevronRight size={14} />
+                      </button>
+                    </div>
+
+                    <div className="category-mega-grid">
+                      {/* Subcategories (if children exist in DB tree) */}
+                      {activeCategory.children && activeCategory.children.length > 0 && (
+                        <div className="category-mega-group">
+                          <h4 className="category-group-title">
+                            Danh mục con
+                            <Icons.ChevronRight size={13} />
+                          </h4>
+                          <div className="category-group-links">
+                            {activeCategory.children.map((sub) => (
+                              <div
+                                key={sub.category_id}
+                                className="category-link-item"
+                                onClick={() => handleCategoryClick(sub.slug)}
+                              >
+                                <span>{sub.category_name}</span>
+                                {sub.product_count > 0 && (
+                                  <span className="category-sub-count">
+                                    ({sub.product_count})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Brands List from DB */}
+                      {brandsList.length > 0 && (
+                        <div className="category-mega-group">
+                          <h4 className="category-group-title">
+                            Thương hiệu hàng đầu
+                            <Icons.ChevronRight size={13} />
+                          </h4>
+                          <div className="category-group-links">
+                            {brandsList.map((brand) => (
+                              <div
+                                key={brand.brand_id}
+                                className="category-link-item brand-badge-link"
+                                onClick={() =>
+                                  handleBrandClick(activeCategory.slug, brand.slug)
+                                }
+                              >
+                                <span>{brand.brand_name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Price Range Filters */}
+                      <div className="category-mega-group">
+                        <h4 className="category-group-title">
+                          Mức giá phổ biến
+                          <Icons.ChevronRight size={13} />
+                        </h4>
+                        <div className="category-group-links">
+                          {priceFilters.map((p, idx) => (
+                            <div
+                              key={idx}
+                              className="category-link-item"
+                              onClick={() =>
+                                handlePriceFilter(activeCategory.slug, p.min, p.max)
+                              }
+                            >
+                              <span>{p.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Fast Tag Highlights */}
+                      <div className="category-mega-group">
+                        <h4 className="category-group-title">
+                          Lựa chọn nhanh
+                          <Icons.Sparkles size={13} />
+                        </h4>
+                        <div className="category-group-tags">
+                          <span
+                            className="category-quick-tag"
+                            onClick={() => handleCategoryClick(activeCategory.slug)}
+                          >
+                            Hàng mới về 🔥
+                          </span>
+                          <span
+                            className="category-quick-tag"
+                            onClick={() => handleCategoryClick(activeCategory.slug)}
+                          >
+                            Bán chạy nhất
+                          </span>
+                          <span
+                            className="category-quick-tag"
+                            onClick={() => handleCategoryClick(activeCategory.slug)}
+                          >
+                            Gaming Esports
+                          </span>
+                          <span
+                            className="category-quick-tag"
+                            onClick={() => handleCategoryClick(activeCategory.slug)}
+                          >
+                            Chính hãng 100%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="category-mega-content empty">
+                    <p style={{ color: '#9CA3AF' }}>Chọn danh mục bên trái để xem chi tiết</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Search Bar */}
           <div className="search-wrapper" ref={searchRef}>

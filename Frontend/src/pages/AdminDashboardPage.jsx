@@ -316,7 +316,7 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   }
 
   return (
-    <div className="container">
+    <div className="container" style={{ paddingBottom: 60 }}>
       <div
         style={{
           display: 'flex',
@@ -326,8 +326,37 @@ export const AdminDashboardPage = ({ onNavigate }) => {
           borderBottom: '2px solid var(--border-light)',
         }}
       >
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111827' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button
+            type="button"
+            onClick={() => onNavigate('home')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              backgroundColor: '#F3F4F6',
+              color: '#374151',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: '1px solid #E5E7EB',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#E5E7EB';
+              e.currentTarget.style.color = '#111827';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#F3F4F6';
+              e.currentTarget.style.color = '#374151';
+            }}
+          >
+            <Icons.ChevronLeft size={16} />
+            <span>Về cửa hàng</span>
+          </button>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111827', margin: 0 }}>
             BẢNG ĐIỀU KHIỂN QUẢN TRỊ GEARK
           </h1>
         </div>

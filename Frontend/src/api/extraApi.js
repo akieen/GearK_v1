@@ -60,11 +60,13 @@ export const addressApi = {
 export const wishlistApi = {
   getWishlist: () => request('/wishlist'),
 
-  toggleWishlist: (product_id) =>
-    request('/wishlist/toggle', {
+  toggleWishlist: (payload) => {
+    const body = typeof payload === 'object' && payload !== null ? payload : { product_id: payload };
+    return request('/wishlist/toggle', {
       method: 'POST',
-      body: JSON.stringify({ product_id }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 };
 
 export const dashboardApi = {
