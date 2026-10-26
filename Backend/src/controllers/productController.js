@@ -98,6 +98,7 @@ async function getProducts(req, res, next) {
         b.brand_id,
         b.brand_name,
         b.slug AS brand_slug,
+        MIN(v.variant_id) AS variant_id,
         MIN(v.price) AS min_price,
         MAX(v.price) AS max_price,
         MIN(v.sale_price) AS min_sale_price,

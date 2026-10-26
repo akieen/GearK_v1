@@ -13,6 +13,7 @@ async function getProductReviews(req, res, next) {
         r.content,
         r.created_at,
         u.user_id,
+        u.full_name,
         u.full_name AS user_name
       FROM reviews r
       JOIN users u ON r.user_id = u.user_id
@@ -21,6 +22,93 @@ async function getProductReviews(req, res, next) {
     `, [productId]);
 
     return successResponse(res, reviews, 'Danh sách đánh giá sản phẩm');
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [GET] /api/reviews/check-eligibility/:productId
+// Kiểm tra user hiện tại đã mua sản phẩm hay chưa
+async function checkEligibility(req, res, next) {
+  try {
+    const userId = req.user.user_id;
+    const { productId } = req.params;
+
+    // 1. Kiểm tra xem user đã từng đánh giá sản phẩm này chưa
+    const [existing] = await pool.query(
+      `SELECT review_id, rating, content, created_at 
+       FROM reviews 
+       WHERE user_id = ? AND product_id = ? 
+       LIMIT 1`,
+      [userId, productId]
+    );
+
+    if (existing.length > 0) {
+      return successResponse(res, {
+        can_review: false,
+        already_reviewed: true,
+        review: existing[0],
+        message: 'Bạn đã đánh giá sản phẩm này rồi.'
+      }, 'Trạng thái quyền đánh giá');
+    }
+
+    // 2. Kiểm tra xem user có đơn hàng hợp lệ chứa sản phẩm này không
+    const [purchases] = await pool.query(`
+      SELECT oi.order_item_id, o.order_id, o.order_status
+      FROM orders o
+      JOIN order_items oi ON o.order_id = oi.order_id
+      JOIN product_variants pv ON oi.variant_id = pv.variant_id
+      WHERE o.user_id = ?
+        AND pv.product_id = ?
+      ORDER BY 
+        CASE 
+          WHEN o.order_status = 'completed' THEN 1
+          WHEN o.order_status IN ('shipping', 'processing', 'confirmed') THEN 2
+          WHEN o.order_status = 'pending' THEN 3
+          ELSE 4
+        END ASC,
+        o.created_at DESC
+    `, [userId, productId]);
+
+    if (purchases.length === 0) {
+      return successResponse(res, {
+        can_review: false,
+        already_reviewed: false,
+        reason: 'not_purchased',
+        message: 'Bạn cần mua sản phẩm này để có thể gửi đánh giá.'
+      }, 'Trạng thái quyền đánh giá');
+    }
+
+    // Không cho phép đánh giá nếu đơn hàng vẫn đang ở trạng thái pending (chờ xác nhận), cancelled, refunded
+    const eligiblePurchases = purchases.filter(
+      p => p.order_status !== 'pending' && p.order_status !== 'cancelled' && p.order_status !== 'refunded'
+    );
+
+    if (eligiblePurchases.length === 0) {
+      const hasPending = purchases.some(p => p.order_status === 'pending');
+      if (hasPending) {
+        return successResponse(res, {
+          can_review: false,
+          already_reviewed: false,
+          reason: 'order_pending',
+          message: 'Đơn hàng của bạn đang ở trạng thái Chờ xác nhận. Bạn chỉ có thể đánh giá sau khi đơn hàng được duyệt.'
+        }, 'Trạng thái quyền đánh giá');
+      }
+
+      return successResponse(res, {
+        can_review: false,
+        already_reviewed: false,
+        reason: 'order_cancelled',
+        message: 'Đơn hàng của bạn đã bị hủy hoặc hoàn tiền nên không thể gửi đánh giá.'
+      }, 'Trạng thái quyền đánh giá');
+    }
+
+    return successResponse(res, {
+      can_review: true,
+      already_reviewed: false,
+      order_item_id: eligiblePurchases[0].order_item_id,
+      message: 'Bạn đủ điều kiện đánh giá sản phẩm này.'
+    }, 'Trạng thái quyền đánh giá');
   } catch (error) {
     next(error);
   }
@@ -41,10 +129,59 @@ async function createReview(req, res, next) {
       return errorResponse(res, 'Điểm đánh giá phải từ 1 đến 5 sao', 400);
     }
 
+    // 1. Kiểm tra đã đánh giá chưa
+    const [existing] = await pool.query(
+      `SELECT review_id FROM reviews WHERE user_id = ? AND product_id = ? LIMIT 1`,
+      [userId, product_id]
+    );
+    if (existing.length > 0) {
+      return errorResponse(res, 'Bạn đã gửi đánh giá cho sản phẩm này rồi!', 400);
+    }
+
+    // 2. Kiểm tra xem user đã mua sản phẩm này hay chưa (không cho phép trạng thái pending/cancelled/refunded)
+    const [purchases] = await pool.query(`
+      SELECT oi.order_item_id, o.order_status
+      FROM orders o
+      JOIN order_items oi ON o.order_id = oi.order_id
+      JOIN product_variants pv ON oi.variant_id = pv.variant_id
+      WHERE o.user_id = ?
+        AND pv.product_id = ?
+      ORDER BY 
+        CASE 
+          WHEN o.order_status = 'completed' THEN 1
+          WHEN o.order_status IN ('shipping', 'processing', 'confirmed') THEN 2
+          WHEN o.order_status = 'pending' THEN 3
+          ELSE 4
+        END ASC,
+        o.created_at DESC
+    `, [userId, product_id]);
+
+    if (purchases.length === 0) {
+      return errorResponse(res, 'Chỉ khách hàng đã mua sản phẩm này tại GearK mới có thể gửi đánh giá!', 403);
+    }
+
+    const eligiblePurchases = purchases.filter(
+      p => p.order_status !== 'pending' && p.order_status !== 'cancelled' && p.order_status !== 'refunded'
+    );
+
+    if (eligiblePurchases.length === 0) {
+      const hasPending = purchases.some(p => p.order_status === 'pending');
+      if (hasPending) {
+        return errorResponse(
+          res,
+          'Đơn hàng của bạn đang ở trạng thái "Chờ xác nhận". Bạn chỉ có thể gửi nhận xét sau khi đơn hàng được duyệt và xử lý!',
+          400
+        );
+      }
+      return errorResponse(res, 'Đơn hàng chứa sản phẩm này đã bị hủy hoặc hoàn tiền nên không thể đánh giá!', 400);
+    }
+
+    const finalOrderItemId = order_item_id || eligiblePurchases[0].order_item_id || null;
+
     const [result] = await pool.query(
       `INSERT INTO reviews (user_id, product_id, order_item_id, rating, content)
        VALUES (?, ?, ?, ?, ?)`,
-      [userId, product_id, order_item_id || null, numRating, content || null]
+      [userId, product_id, finalOrderItemId, numRating, content || null]
     );
 
     return successResponse(
@@ -86,6 +223,8 @@ async function deleteReview(req, res, next) {
 
 module.exports = {
   getProductReviews,
+  checkEligibility,
   createReview,
   deleteReview
 };
+
