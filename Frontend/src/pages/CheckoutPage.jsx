@@ -6,6 +6,7 @@ import { addressApi, couponApi } from '../api/extraApi';
 import { orderApi } from '../api/cartApi';
 import { formatPrice } from '../utils/formatters';
 import Icons from '../components/common/Icons';
+import { Modal } from '../components/common/ToastContainer';
 
 export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) => {
   const { cart, cartTotal, fetchCart } = useCart();
@@ -26,6 +27,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Always fetch latest cart on mount to ensure all items are loaded
   useEffect(() => {
@@ -124,8 +126,10 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   const discountAmount = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
   const finalTotal = Math.max(0, cartTotal - discountAmount);
 
-  // Submit Order
-  const handlePlaceOrder = async () => {
+  const selectedAddress = addresses.find((a) => a.address_id === selectedAddressId);
+
+  // Validate before showing confirmation dialog
+  const handleOpenConfirmModal = () => {
     if (!selectedAddressId) {
       toast.warning('Vui lòng chọn hoặc thêm địa chỉ nhận hàng!');
       return;
@@ -136,6 +140,11 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
       return;
     }
 
+    setShowConfirmModal(true);
+  };
+
+  // Submit Order after customer confirms in dialog
+  const handleExecuteOrder = async () => {
     setPlacingOrder(true);
     try {
       const payload = {
@@ -151,6 +160,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
 
       const res = await orderApi.createOrder(payload);
       if (res.success && res.data) {
+        setShowConfirmModal(false);
         toast.success('🎉 Đặt hàng thành công! Cảm ơn bạn đã tin chọn GearK.');
         await fetchCart();
         if (onOrderCompleted) {
@@ -473,13 +483,265 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
             <button
               className="btn-checkout"
               disabled={placingOrder}
-              onClick={handlePlaceOrder}
+              onClick={handleOpenConfirmModal}
             >
-              {placingOrder ? 'ĐANG TẠO ĐƠN HÀNG...' : 'XÁC NHẬN ĐẶT HÀNG'}
+              {placingOrder ? 'ĐANG TẠO ĐƠN HÀNG...' : 'TIẾN HÀNH ĐẶT HÀNG'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog before finalizing order */}
+      <Modal
+        isOpen={showConfirmModal}
+        onClose={() => !placingOrder && setShowConfirmModal(false)}
+        title="Xác nhận thông tin đặt hàng"
+        maxWidth={550}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Notice banner */}
+          <div
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#EFF6FF',
+              borderRadius: 8,
+              border: '1px solid #BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 13,
+              color: '#1E40AF',
+            }}
+          >
+            <Icons.Info size={20} style={{ color: '#2563EB', flexShrink: 0 }} />
+            <div>
+              Vui lòng kiểm tra kỹ thông tin người nhận và đơn hàng trước khi xác nhận.
+            </div>
+          </div>
+
+          {/* Delivery & Payment details */}
+          <div
+            style={{
+              backgroundColor: '#F9FAFB',
+              borderRadius: 8,
+              border: '1px solid #E5E7EB',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              fontSize: 13,
+            }}
+          >
+            {/* Recipient info */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
+                <Icons.MapPin size={16} style={{ color: 'var(--primary)' }} />
+                <span>Địa chỉ nhận hàng:</span>
+              </div>
+              {selectedAddress ? (
+                <div style={{ paddingLeft: 22 }}>
+                  <div style={{ fontWeight: 700, color: '#111827' }}>
+                    {selectedAddress.recipient_name} —{' '}
+                    <span style={{ color: '#2563EB' }}>{selectedAddress.recipient_phone}</span>
+                  </div>
+                  <div style={{ color: '#4B5563', marginTop: 2, lineHeight: 1.4 }}>
+                    {selectedAddress.street_address}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ paddingLeft: 22, color: '#DC2626' }}>Chưa chọn địa chỉ</div>
+              )}
+            </div>
+
+            <div style={{ height: 1, backgroundColor: '#E5E7EB' }} />
+
+            {/* Payment method */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#374151', marginBottom: 4 }}>
+                <Icons.CreditCard size={16} style={{ color: 'var(--primary)' }} />
+                <span>Hình thức thanh toán:</span>
+              </div>
+              <div style={{ paddingLeft: 22, color: '#111827', fontWeight: 600 }}>
+                {paymentMethod === 'cod' ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    💵 Thanh toán tiền mặt khi nhận hàng (COD)
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    🏦 Chuyển khoản ngân hàng (Quét mã VietQR)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Order notes if any */}
+            {orderNotes.trim() && (
+              <>
+                <div style={{ height: 1, backgroundColor: '#E5E7EB' }} />
+                <div>
+                  <div style={{ fontWeight: 700, color: '#374151', marginBottom: 2 }}>
+                    Ghi chú của bạn:
+                  </div>
+                  <div style={{ color: '#4B5563', fontStyle: 'italic', paddingLeft: 8 }}>
+                    "{orderNotes.trim()}"
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Items summary */}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', marginBottom: 8 }}>
+              Danh sách sản phẩm ({cart.items?.length || 0} món):
+            </div>
+            <div
+              style={{
+                maxHeight: 150,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                padding: '8px 12px',
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              {cart.items?.map((item) => (
+                <div
+                  key={item.cart_item_id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    fontSize: 12.5,
+                    paddingBottom: 6,
+                    borderBottom: '1px dashed #F3F4F6',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                    <img
+                      src={item.thumbnail_url}
+                      alt={item.product_name}
+                      style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4, border: '1px solid #E5E7EB', flexShrink: 0 }}
+                    />
+                    <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontWeight: 600, color: '#111827' }}>{item.product_name}</span>
+                      <span style={{ color: '#6B7280', marginLeft: 6 }}>× {item.quantity}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
+                    {formatPrice((parseFloat(item.sale_price || item.price) || 0) * item.quantity)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Financial summary box */}
+          <div
+            style={{
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: 8,
+              padding: '12px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontSize: 13,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4B5563' }}>
+              <span>Tạm tính:</span>
+              <span style={{ fontWeight: 600, color: '#111827' }}>{formatPrice(cartTotal)}</span>
+            </div>
+            {discountAmount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
+                <span>Voucher giảm giá ({appliedCoupon?.coupon_code}):</span>
+                <span style={{ fontWeight: 700 }}>-{formatPrice(discountAmount)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
+              <span>Phí vận chuyển:</span>
+              <span style={{ fontWeight: 700 }}>0₫ (Miễn phí toàn quốc)</span>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                borderTop: '1px dashed #FCD34D',
+                paddingTop: 8,
+                marginTop: 2,
+              }}
+            >
+              <span style={{ fontWeight: 800, fontSize: 14, color: '#92400E' }}>Tổng thanh toán:</span>
+              <span style={{ fontWeight: 900, fontSize: 19, color: 'var(--primary)' }}>
+                {formatPrice(finalTotal)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'flex-end',
+              marginTop: 4,
+            }}
+          >
+            <button
+              type="button"
+              disabled={placingOrder}
+              onClick={() => setShowConfirmModal(false)}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 6,
+                fontWeight: 600,
+                fontSize: 13.5,
+                border: '1px solid #D1D5DB',
+                backgroundColor: '#FFFFFF',
+                color: '#374151',
+                cursor: placingOrder ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Kiểm tra lại
+            </button>
+            <button
+              type="button"
+              disabled={placingOrder}
+              onClick={handleExecuteOrder}
+              style={{
+                padding: '10px 24px',
+                borderRadius: 6,
+                fontWeight: 700,
+                fontSize: 13.5,
+                border: 'none',
+                backgroundColor: 'var(--primary)',
+                color: '#FFFFFF',
+                cursor: placingOrder ? 'not-allowed' : 'pointer',
+                opacity: placingOrder ? 0.75 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 2px 4px rgba(227, 0, 25, 0.25)',
+              }}
+            >
+              {placingOrder ? (
+                <>
+                  <span className="spinner" style={{ width: 14, height: 14, border: '2px solid #FFF', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                  Đang tạo đơn hàng...
+                </>
+              ) : (
+                'Xác nhận đặt hàng'
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -180,7 +180,11 @@ async function updateProfile(req, res, next) {
 // [GET] /api/auth/users (Admin only)
 async function getAllUsers(req, res, next) {
   try {
-    const { role, search } = req.query;
+    const { role, search, page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 10));
+    const offset = (pageNum - 1) * limitNum;
+
     const whereConditions = [];
     const params = [];
 
@@ -197,12 +201,22 @@ async function getAllUsers(req, res, next) {
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
+    // Count filtered records
+    const [countResult] = await pool.query(
+      `SELECT COUNT(*) AS total FROM users ${whereClause}`,
+      params
+    );
+    const totalItems = countResult[0].total || 0;
+    const totalPages = Math.ceil(totalItems / limitNum) || 1;
+
+    // Fetch paginated users
     const [users] = await pool.query(
       `SELECT user_id, full_name, email, role, created_at, updated_at 
        FROM users 
        ${whereClause} 
-       ORDER BY user_id DESC`,
-      params
+       ORDER BY user_id DESC 
+       LIMIT ? OFFSET ?`,
+      [...params, limitNum, offset]
     );
 
     const [summaryRows] = await pool.query(`
@@ -218,6 +232,12 @@ async function getAllUsers(req, res, next) {
       res,
       {
         items: users,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total_items: totalItems,
+          total_pages: totalPages,
+        },
         summary: {
           total_users: Number(summaryRows[0].total_users) || 0,
           total_admins: Number(summaryRows[0].total_admins) || 0,
@@ -327,6 +347,35 @@ async function updateUserRole(req, res, next) {
   }
 }
 
+// [DELETE] /api/auth/users/:id (Admin only)
+async function deleteUser(req, res, next) {
+  try {
+    const { id } = req.params;
+    const targetId = parseInt(id, 10);
+
+    if (req.user.user_id === targetId) {
+      return errorResponse(res, 'Bạn không thể tự xóa tài khoản của chính mình', 400);
+    }
+
+    const [existing] = await pool.query('SELECT role, full_name FROM users WHERE user_id = ?', [targetId]);
+    if (existing.length === 0) {
+      return errorResponse(res, 'Người dùng không tồn tại', 404);
+    }
+
+    if (existing[0].role === 'admin') {
+      const [adminCount] = await pool.query('SELECT COUNT(*) AS total FROM users WHERE role = "admin"');
+      if (adminCount[0].total <= 1) {
+        return errorResponse(res, 'Không thể xóa Admin duy nhất của hệ thống', 400);
+      }
+    }
+
+    await pool.query('DELETE FROM users WHERE user_id = ?', [targetId]);
+    return successResponse(res, null, `Đã xóa tài khoản "${existing[0].full_name}" thành công`);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -335,4 +384,5 @@ module.exports = {
   getAllUsers,
   createStaff,
   updateUserRole,
+  deleteUser,
 };

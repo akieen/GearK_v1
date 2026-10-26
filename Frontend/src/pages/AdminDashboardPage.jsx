@@ -15,6 +15,7 @@ import CategoriesTab from './pageDashboard/CategoriesTab';
 import BrandsTab from './pageDashboard/BrandsTab';
 import VariantsTab from './pageDashboard/VariantsTab';
 import InventoryTab from './pageDashboard/InventoryTab';
+import UsersTab from './pageDashboard/UsersTab';
 import AddProductModal from './pageDashboard/AddProductModal';
 import EditProductModal from './pageDashboard/EditProductModal';
 
@@ -349,159 +350,300 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   }
 
   return (
-    <div className="container" style={{ paddingBottom: 60 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '24px 0 16px 0',
-          borderBottom: '2px solid var(--border-light)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button
-            type="button"
-            onClick={() => onNavigate('home')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              backgroundColor: '#F3F4F6',
-              color: '#374151',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: '1px solid #E5E7EB',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#E5E7EB';
-              e.currentTarget.style.color = '#111827';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#F3F4F6';
-              e.currentTarget.style.color = '#374151';
-            }}
-          >
-            <Icons.ChevronLeft size={16} />
-            <span>Về cửa hàng</span>
-          </button>
-          <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111827', margin: 0 }}>
-            BẢNG ĐIỀU KHIỂN QUẢN TRỊ GEARK
-          </h1>
+    <div className="freedash-wrapper">
+      {/* Left Navigation Sidebar */}
+      <aside className="freedash-sidebar">
+        {/* Brand */}
+        <div className="freedash-brand">
+          <div className="freedash-logo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+              <line x1="4" y1="22" x2="4" y2="15"></line>
+            </svg>
+          </div>
+          <span className="freedash-brand-name">GearK Dash</span>
         </div>
-        <span
-          style={{
-            backgroundColor: '#FEE2E2',
-            color: 'var(--primary)',
-            padding: '6px 14px',
-            borderRadius: 20,
-            fontSize: 12,
-            fontWeight: 800,
-            textTransform: 'uppercase',
+
+        {/* Dashboard Main Button */}
+        <button
+          className={`freedash-nav-btn ${activeTab === 'stats' ? 'active' : ''}`}
+          onClick={() => setActiveTab('stats')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Tổng quan (Dashboard)</span>
+          </div>
+        </button>
+
+        {/* APPLICATIONS GROUP: BÁN HÀNG & ĐƠN HÀNG */}
+        <div className="freedash-nav-group-title">BÁN HÀNG & ĐƠN HÀNG</div>
+
+        <button
+          className={`freedash-nav-btn ${activeTab === 'orders' ? 'active' : ''}`}
+          onClick={() => setActiveTab('orders')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"></path>
+              <path d="M13 5v2"></path>
+              <path d="M13 17v2"></path>
+              <path d="M13 11v2"></path>
+            </svg>
+            <span>Đơn hàng (Orders)</span>
+          </div>
+        </button>
+
+        <button
+          className={`freedash-nav-btn ${activeTab === 'users' ? 'active' : ''}`}
+          onClick={() => {
+            if (!isAdmin) {
+              toast.warning('Chỉ Quản trị viên (Admin) mới có quyền truy cập mục quản lý nhân sự & phân quyền!');
+              return;
+            }
+            setActiveTab('users');
           }}
         >
-          👑 {user.role}: {user.full_name}
-        </span>
-      </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>Nhân sự & Khách hàng</span>
+          </div>
+          {!isAdmin && (
+            <span style={{ fontSize: 10, background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, color: '#94A3B8' }}>
+              Admin
+            </span>
+          )}
+        </button>
 
-      <div className="admin-layout">
-        {/* Left Navigation Sidebar */}
-        <aside className="admin-sidebar">
+        <button
+          className="freedash-nav-btn"
+          onClick={() => toast.info('Tin nhắn khách hàng & Đánh giá')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Khách hàng & Chat</span>
+          </div>
+        </button>
+
+        <button
+          className="freedash-nav-btn"
+          onClick={() => toast.info('Lịch hẹn bảo hành & sự kiện')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Lịch giao hàng (Calendar)</span>
+          </div>
+        </button>
+
+        {/* COMPONENTS GROUP: SẢN PHẨM & KHO HÀNG */}
+        <div className="freedash-nav-group-title">SẢN PHẨM & KHO HÀNG</div>
+
+        <div>
           <button
-            className={`admin-nav-item ${activeTab === 'stats' ? 'active' : ''}`}
-            onClick={() => setActiveTab('stats')}
+            className={`freedash-nav-btn ${['products', 'variants'].includes(activeTab) ? 'active' : ''}`}
+            onClick={() => {
+              setProductsMenuOpen(!productsMenuOpen);
+              if (!['products', 'variants'].includes(activeTab)) {
+                setActiveTab('products');
+              }
+            }}
           >
-            <Icons.LayoutDashboard size={18} />
-            <span>Tổng quan & KPI</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span>Quản lý Sản phẩm</span>
+            </div>
+            <Icons.ChevronDown size={14} style={{ transform: productsMenuOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
           </button>
 
-          <button
-            className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
-            onClick={() => setActiveTab('orders')}
-          >
-            <Icons.Package size={18} />
-            <span>Quản lý Đơn hàng</span>
-          </button>
+          {productsMenuOpen && (
+            <div className="freedash-nav-sublist">
+              <button
+                className={`freedash-subnav-btn ${activeTab === 'products' ? 'active' : ''}`}
+                onClick={() => setActiveTab('products')}
+              >
+                Danh sách sản phẩm
+              </button>
+              <button
+                className={`freedash-subnav-btn ${activeTab === 'variants' ? 'active' : ''}`}
+                onClick={() => setActiveTab('variants')}
+              >
+                Phiên bản / Biến thể
+              </button>
+            </div>
+          )}
+        </div>
 
-          {/* Products Dropdown Menu */}
-          <div className="admin-nav-dropdown">
-            <button
-              className={`admin-nav-item ${['products', 'categories', 'brands', 'variants'].includes(activeTab) ? 'active' : ''}`}
-              onClick={() => {
-                setProductsMenuOpen(!productsMenuOpen);
-                if (!['products', 'categories', 'brands', 'variants'].includes(activeTab)) {
-                  setActiveTab('products');
-                }
-              }}
-              style={{ justifyContent: 'space-between' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icons.Sliders size={18} />
-                <span>Quản lý Sản phẩm</span>
-              </div>
-              {productsMenuOpen ? <Icons.ChevronUp size={16} /> : <Icons.ChevronDown size={16} />}
-            </button>
+        <button
+          className={`freedash-nav-btn ${activeTab === 'inventory' ? 'active' : ''}`}
+          onClick={() => setActiveTab('inventory')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span>Quản lý Tồn kho</span>
+          </div>
+        </button>
 
-            {productsMenuOpen && (
-              <div className="admin-subnav">
-                <button
-                  className={`admin-subnav-item ${activeTab === 'products' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('products')}
-                >
-                  <Icons.Package size={14} />
-                  <span>Tất cả sản phẩm</span>
-                </button>
+        <button
+          className={`freedash-nav-btn ${activeTab === 'categories' ? 'active' : ''}`}
+          onClick={() => setActiveTab('categories')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span>Danh mục (Categories)</span>
+          </div>
+        </button>
 
-                <button
-                  className={`admin-subnav-item ${activeTab === 'categories' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('categories')}
-                >
-                  <Icons.Folder size={14} />
-                  <span>Danh mục (Categories)</span>
-                </button>
+        <button
+          className={`freedash-nav-btn ${activeTab === 'brands' ? 'active' : ''}`}
+          onClick={() => setActiveTab('brands')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <span>Thương hiệu (Brands)</span>
+          </div>
+        </button>
 
-                <button
-                  className={`admin-subnav-item ${activeTab === 'brands' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('brands')}
-                >
-                  <Icons.Tag size={14} />
-                  <span>Thương hiệu (Brands)</span>
-                </button>
+        <button
+          className={`freedash-nav-btn ${activeTab === 'coupons' ? 'active' : ''}`}
+          onClick={() => setActiveTab('coupons')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+              <line x1="2" y1="10" x2="22" y2="10"></line>
+            </svg>
+            <span>Mã giảm giá (Coupons)</span>
+          </div>
+        </button>
 
-                <button
-                  className={`admin-subnav-item ${activeTab === 'variants' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('variants')}
-                >
-                  <Icons.Layers size={14} />
-                  <span>Biến thể (Product Variants)</span>
-                </button>
-              </div>
-            )}
+        {/* AUTHENTICATION GROUP */}
+        <div className="freedash-nav-group-title">HỆ THỐNG</div>
+
+        <button
+          className="freedash-nav-btn"
+          onClick={() => onNavigate('home')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Login</span>
+          </div>
+        </button>
+
+        <button
+          className="freedash-nav-btn"
+          onClick={() => onNavigate('home')}
+          style={{ marginTop: 'auto', color: '#DC2626' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Icons.ChevronLeft size={18} />
+            <span>Về Storefront</span>
+          </div>
+        </button>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="freedash-main">
+        {/* Topbar Header */}
+        <header className="freedash-topbar">
+          <div className="freedash-topbar-left">
+            <div className="freedash-icon-pill" title="Thông báo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span className="freedash-badge-count">5</span>
+            </div>
+
+            <div className="freedash-icon-pill" title="Cài đặt">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </div>
+
+            <div className="freedash-lang-pill">
+              <span>EN</span>
+              <Icons.ChevronDown size={13} />
+            </div>
           </div>
 
-          <button
-            className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
-            onClick={() => setActiveTab('inventory')}
-          >
-            <Icons.Package size={18} />
-            <span>Kho hàng & Xuất Nhập</span>
-          </button>
+          <div className="freedash-topbar-right">
+            <div className="freedash-search-box">
+              <input
+                type="text"
+                placeholder="Search"
+                className="freedash-search-input"
+              />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
 
-          <button
-            className={`admin-nav-item ${activeTab === 'coupons' ? 'active' : ''}`}
-            onClick={() => setActiveTab('coupons')}
-          >
-            <Icons.Tag size={18} />
-            <span>Mã giảm giá (Vouchers)</span>
-          </button>
-        </aside>
+            <div className="freedash-user-badge">
+              <img
+                src={user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
+                alt="Avatar"
+                className="freedash-user-avatar"
+              />
+              <span className="freedash-user-name">
+                Hello, <strong>{user?.full_name || 'Jason Doe'}</strong>
+              </span>
+              <Icons.ChevronDown size={14} style={{ color: '#94A3B8' }} />
+            </div>
+          </div>
+        </header>
 
-        {/* Main Admin Content */}
-        <main>
+        {/* Content Body */}
+        <div className="freedash-content">
+          {/* Greeting Row */}
+          <div className="freedash-greeting-row">
+            <div>
+              <h1 className="freedash-greeting-title">
+                Good Morning {user?.full_name ? user.full_name.split(' ').slice(-1)[0] : 'Jason'}!
+              </h1>
+              <div className="freedash-greeting-sub">Dashboard</div>
+            </div>
+
+            <div className="freedash-date-filter">
+              <span>Aug 23</span>
+              <Icons.ChevronDown size={14} />
+            </div>
+          </div>
                     {/* TAB 1: OVERVIEW & STATS */}
           {activeTab === 'stats' && (
             <StatsTab
@@ -605,8 +747,18 @@ export const AdminDashboardPage = ({ onNavigate }) => {
             <InventoryTab Icons={Icons} />
           )}
 
-</main>
+          {/* TAB: USERS & STAFF MANAGEMENT */}
+          {activeTab === 'users' && (
+            <UsersTab
+              user={user}
+              isAdmin={isAdmin}
+              toast={toast}
+              Icons={Icons}
+            />
+          )}
+        </div>
       </div>
+
       {/* Modal Add Product */}
       <AddProductModal
         showAddProductModal={showAddProductModal}
