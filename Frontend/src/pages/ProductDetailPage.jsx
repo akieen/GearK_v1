@@ -23,6 +23,27 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
   const [ratingInput, setRatingInput] = useState(5);
   const [reviewContent, setReviewContent] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [eligibility, setEligibility] = useState(null);
+  const [checkingEligibility, setCheckingEligibility] = useState(false);
+
+  // Check review eligibility
+  const fetchEligibility = useCallback(async (productId) => {
+    if (!user || !productId) {
+      setEligibility(null);
+      return;
+    }
+    setCheckingEligibility(true);
+    try {
+      const res = await reviewApi.checkEligibility(productId);
+      if (res && res.data) {
+        setEligibility(res.data);
+      }
+    } catch (err) {
+      console.error('Lỗi kiểm tra quyền đánh giá:', err);
+    } finally {
+      setCheckingEligibility(false);
+    }
+  }, [user]);
 
   // Fetch product detail by slug
   const fetchProduct = useCallback(async () => {
@@ -46,9 +67,10 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
           setSelectedVariant(prod.variants[0]);
         }
 
-        // Fetch reviews
+        // Fetch reviews & eligibility
         if (prod.product_id) {
           fetchReviews(prod.product_id);
+          fetchEligibility(prod.product_id);
         }
       }
     } catch (err) {
@@ -56,7 +78,7 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
     } finally {
       setLoading(false);
     }
-  }, [slug]);
+  }, [slug, fetchEligibility]);
 
   const fetchReviews = async (productId) => {
     try {
@@ -73,12 +95,22 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
     fetchProduct();
   }, [fetchProduct]);
 
+  useEffect(() => {
+    if (product?.product_id) {
+      fetchEligibility(product.product_id);
+    }
+  }, [user, product?.product_id, fetchEligibility]);
+
   // Handle Review submission
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!user) {
       toast.info('Vui lòng đăng nhập để gửi đánh giá sản phẩm!');
       openAuthModal('login');
+      return;
+    }
+    if (eligibility && !eligibility.can_review) {
+      toast.warning(eligibility.message || 'Bạn chưa đủ điều kiện gửi đánh giá cho sản phẩm này.');
       return;
     }
     if (!reviewContent.trim()) {
@@ -91,12 +123,14 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
       const res = await reviewApi.createReview(
         product.product_id,
         ratingInput,
-        reviewContent.trim()
+        reviewContent.trim(),
+        eligibility?.order_item_id
       );
       if (res.success) {
         toast.success('Cảm ơn bạn! Đánh giá đã được ghi nhận.');
         setReviewContent('');
         fetchReviews(product.product_id);
+        fetchEligibility(product.product_id);
       }
     } catch (err) {
       toast.error(err.message || 'Lỗi gửi đánh giá');
@@ -510,52 +544,151 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
 
           {/* Write a review form */}
           <div style={{ flex: 1 }}>
-            <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
-              Gửi nhận xét của bạn về sản phẩm này
-            </h4>
-            <form onSubmit={handleSubmitReview}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 13, color: '#4B5563' }}>Chọn số sao:</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      type="button"
-                      key={star}
-                      onClick={() => setRatingInput(star)}
-                      style={{ color: star <= ratingInput ? '#F59E0B' : '#D1D5DB' }}
-                    >
-                      <Icons.Star size={20} filled={star <= ratingInput} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder={user ? "Cảm nhận của bạn về độ mượt, switch, sensor...?" : "Vui lòng đăng nhập để đánh giá..."}
-                  value={reviewContent}
-                  onChange={(e) => setReviewContent(e.target.value)}
-                  disabled={!user}
-                />
+            {!user ? (
+              <div
+                style={{
+                  backgroundColor: '#F9FAFB',
+                  border: '1.5px dashed var(--border-light)',
+                  borderRadius: 8,
+                  padding: '20px 24px',
+                  textAlign: 'center',
+                }}
+              >
+                <Icons.ShieldCheck size={28} style={{ color: 'var(--primary)', margin: '0 auto 8px auto' }} />
+                <h4 style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>
+                  Đăng nhập để đánh giá sản phẩm
+                </h4>
+                <p style={{ fontSize: 12.5, color: '#6B7280', marginBottom: 12 }}>
+                  Theo chính sách đánh giá thực tế của GearK, chỉ khách hàng đã mua và nhận hàng thành công mới có thể gửi nhận xét.
+                </p>
                 <button
-                  type="submit"
-                  disabled={submittingReview}
+                  type="button"
+                  onClick={() => openAuthModal('login')}
                   style={{
                     backgroundColor: 'var(--primary)',
                     color: '#FFFFFF',
-                    padding: '0 20px',
+                    padding: '8px 18px',
                     borderRadius: 6,
                     fontWeight: 700,
                     fontSize: 13,
-                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {submittingReview ? 'Đang gửi...' : 'Gửi nhận xét'}
+                  Đăng nhập ngay
                 </button>
               </div>
-            </form>
+            ) : checkingEligibility ? (
+              <div style={{ padding: 20, textAlign: 'center', color: '#6B7280', fontSize: 13 }}>
+                Đang kiểm tra trạng thái đơn mua của bạn...
+              </div>
+            ) : eligibility?.already_reviewed ? (
+              <div
+                style={{
+                  backgroundColor: '#ECFDF5',
+                  border: '1px solid #A7F3D0',
+                  borderRadius: 8,
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: '#10B981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icons.Check size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, color: '#065F46', fontSize: 13.5 }}>
+                    Bạn đã đánh giá sản phẩm này!
+                  </div>
+                  <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>
+                    Cảm ơn bạn đã đóng góp trải nghiệm thực tế để giúp cộng đồng game thủ GearK lựa chọn sản phẩm phù hợp.
+                  </div>
+                </div>
+              </div>
+            ) : eligibility && !eligibility.can_review ? (
+              <div
+                style={{
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  borderRadius: 8,
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                }}
+              >
+                <Icons.AlertCircle size={22} style={{ color: '#D97706', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontWeight: 800, color: '#92400E', fontSize: 13.5 }}>
+                    Điều kiện gửi đánh giá sản phẩm
+                  </div>
+                  <div style={{ fontSize: 12.5, color: '#78350F', marginTop: 4, lineHeight: 1.4 }}>
+                    {eligibility.message || 'Chỉ khách hàng đã mua và nhận hàng thành công tại GearK mới có thể gửi nhận xét.'}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
+                    Gửi nhận xét của bạn về sản phẩm này
+                  </h4>
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: '#059669',
+                      backgroundColor: '#ECFDF5',
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    ✓ Đã mua hàng thành công
+                  </span>
+                </div>
+                <form onSubmit={handleSubmitReview}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, color: '#4B5563' }}>Chọn số sao:</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          type="button"
+                          key={star}
+                          onClick={() => setRatingInput(star)}
+                          style={{ color: star <= ratingInput ? '#F59E0B' : '#D1D5DB' }}
+                        >
+                          <Icons.Star size={20} filled={star <= ratingInput} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Cảm nhận thực tế của bạn về độ mượt, switch, cảm biến...?"
+                      value={reviewContent}
+                      onChange={(e) => setReviewContent(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={submittingReview}
+                      style={{
+                        backgroundColor: 'var(--primary)',
+                        color: '#FFFFFF',
+                        padding: '0 20px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        fontSize: 13,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {submittingReview ? 'Đang gửi...' : 'Gửi nhận xét'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
 

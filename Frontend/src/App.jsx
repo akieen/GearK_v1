@@ -150,6 +150,7 @@ function AppContent() {
           <CheckoutPage
             onNavigate={navigate}
             onOrderCompleted={(data) => setLastOrderData(data)}
+            initialCoupon={routeParams.coupon}
           />
         )}
 

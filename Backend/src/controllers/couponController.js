@@ -88,9 +88,21 @@ async function createCoupon(req, res, next) {
       return errorResponse(res, 'Loại giảm giá phải là "percent" hoặc "fixed"', 400);
     }
 
-    const limitValue = usage_limit !== undefined && usage_limit !== '' ? Number(usage_limit) : null;
-    const startDateVal = start_date ? new Date(start_date) : null;
-    const endDateVal = end_date ? new Date(end_date) : null;
+    let startDateVal = null;
+    if (start_date) {
+      startDateVal = new Date(start_date);
+      if (typeof start_date === 'string' && start_date.length === 10) {
+        startDateVal.setHours(0, 0, 0, 0);
+      }
+    }
+
+    let endDateVal = null;
+    if (end_date) {
+      endDateVal = new Date(end_date);
+      if (typeof end_date === 'string' && end_date.length === 10) {
+        endDateVal.setHours(23, 59, 59, 999);
+      }
+    }
 
     if (startDateVal && endDateVal && startDateVal > endDateVal) {
       return errorResponse(res, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu', 400);
@@ -109,6 +121,49 @@ async function createCoupon(req, res, next) {
     );
 
     return successResponse(res, { coupon_id: result.insertId }, 'Tạo mã giảm giá thành công', 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [PUT] /api/coupons/:id (Admin only)
+async function updateCoupon(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { coupon_code, discount_type, discount_value, usage_limit, start_date, end_date } = req.body;
+
+    const [existing] = await pool.query('SELECT * FROM coupons WHERE coupon_id = ?', [id]);
+    if (existing.length === 0) {
+      return errorResponse(res, 'Mã giảm giá không tồn tại', 404);
+    }
+
+    let startDateVal = start_date !== undefined ? (start_date ? new Date(start_date) : null) : existing[0].start_date;
+    if (startDateVal && typeof start_date === 'string' && start_date.length === 10) {
+      startDateVal.setHours(0, 0, 0, 0);
+    }
+
+    let endDateVal = end_date !== undefined ? (end_date ? new Date(end_date) : null) : existing[0].end_date;
+    if (endDateVal && typeof end_date === 'string' && end_date.length === 10) {
+      endDateVal.setHours(23, 59, 59, 999);
+    }
+
+    if (startDateVal && endDateVal && new Date(startDateVal) > new Date(endDateVal)) {
+      return errorResponse(res, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu', 400);
+    }
+
+    const code = coupon_code ? coupon_code.trim().toUpperCase() : existing[0].coupon_code;
+    const type = discount_type || existing[0].discount_type;
+    const val = discount_value !== undefined ? Number(discount_value) : existing[0].discount_value;
+    const limit = usage_limit !== undefined ? (usage_limit === '' || usage_limit === null ? null : Number(usage_limit)) : existing[0].usage_limit;
+
+    await pool.query(
+      `UPDATE coupons 
+       SET coupon_code = ?, discount_type = ?, discount_value = ?, usage_limit = ?, start_date = ?, end_date = ?
+       WHERE coupon_id = ?`,
+      [code, type, val, limit, startDateVal, endDateVal, id]
+    );
+
+    return successResponse(res, null, 'Cập nhật mã giảm giá thành công');
   } catch (error) {
     next(error);
   }
@@ -140,6 +195,7 @@ module.exports = {
   getCoupons,
   validateCoupon,
   createCoupon,
+  updateCoupon,
   deleteCoupon,
   incrementCouponUsage
 };

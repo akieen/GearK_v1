@@ -9,6 +9,7 @@ router.use(verifyToken);
 router.post('/', orderController.createOrder);
 router.get('/', orderController.getUserOrders);
 router.get('/:codeOrId', orderController.getOrderDetail);
+router.put('/:id/cancel', orderController.cancelOrder);
 
 // Admin / Staff endpoints
 router.get('/admin/all', requireRoles('admin', 'staff'), orderController.getAllOrders);

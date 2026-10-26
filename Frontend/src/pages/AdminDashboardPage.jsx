@@ -46,6 +46,8 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   const [newDiscountType, setNewDiscountType] = useState('percent');
   const [newDiscountVal, setNewDiscountVal] = useState('');
   const [newUsageLimit, setNewUsageLimit] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
 
   // Categories & Brands for product creation
   const [categories, setCategories] = useState([]);
@@ -266,22 +268,46 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   const handleCreateCoupon = async (e) => {
     e.preventDefault();
     if (!newCouponCode || !newDiscountVal) return;
+
+    if (newStartDate && newEndDate && new Date(newStartDate) > new Date(newEndDate)) {
+      toast.warning('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu!');
+      return;
+    }
+
     try {
       const res = await couponApi.createCoupon({
         coupon_code: newCouponCode.trim().toUpperCase(),
         discount_type: newDiscountType,
         discount_value: parseFloat(newDiscountVal),
         usage_limit: newUsageLimit !== '' ? parseInt(newUsageLimit) : undefined,
+        start_date: newStartDate || undefined,
+        end_date: newEndDate || undefined,
       });
       if (res.success) {
         toast.success(`Đã tạo mã ${newCouponCode.toUpperCase()}!`);
         setNewCouponCode('');
         setNewDiscountVal('');
         setNewUsageLimit('');
+        setNewStartDate('');
+        setNewEndDate('');
         fetchCoupons();
       }
     } catch (err) {
       toast.error(err.message || 'Lỗi tạo mã giảm giá');
+    }
+  };
+
+  const handleUpdateCoupon = async (id, data) => {
+    try {
+      const res = await couponApi.updateCoupon(id, data);
+      if (res.success) {
+        toast.success('Cập nhật mã giảm giá thành công!');
+        fetchCoupons();
+        return true;
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi cập nhật mã giảm giá');
+      return false;
     }
   };
 
@@ -560,7 +586,12 @@ export const AdminDashboardPage = ({ onNavigate }) => {
               setNewDiscountVal={setNewDiscountVal}
               newUsageLimit={newUsageLimit}
               setNewUsageLimit={setNewUsageLimit}
+              newStartDate={newStartDate}
+              setNewStartDate={setNewStartDate}
+              newEndDate={newEndDate}
+              setNewEndDate={setNewEndDate}
               handleCreateCoupon={handleCreateCoupon}
+              handleUpdateCoupon={handleUpdateCoupon}
               formatPrice={formatPrice}
               formatDate={formatDate}
               isAdmin={isAdmin}

@@ -247,7 +247,7 @@ export const CartPage = ({ onNavigate }) => {
 
           <button
             className="btn-checkout"
-            onClick={() => onNavigate('checkout')}
+            onClick={() => onNavigate(appliedCoupon ? `checkout?coupon=${appliedCoupon.coupon_code}` : 'checkout')}
           >
             TIẾN HÀNH ĐẶT HÀNG
           </button>

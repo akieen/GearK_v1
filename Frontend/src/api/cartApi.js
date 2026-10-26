@@ -57,4 +57,9 @@ export const orderApi = {
         payment_status,
       }),
     }),
+
+  cancelOrder: (id) =>
+    request(`/orders/${id}/cancel`, {
+      method: 'PUT',
+    }),
 };

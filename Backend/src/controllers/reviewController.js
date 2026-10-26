@@ -75,23 +75,21 @@ async function checkEligibility(req, res, next) {
         can_review: false,
         already_reviewed: false,
         reason: 'not_purchased',
-        message: 'Bạn cần mua sản phẩm này để có thể gửi đánh giá.'
+        message: 'Chỉ khách hàng đã mua và nhận sản phẩm thành công tại GearK mới có thể gửi nhận xét.'
       }, 'Trạng thái quyền đánh giá');
     }
 
-    // Không cho phép đánh giá nếu đơn hàng vẫn đang ở trạng thái pending (chờ xác nhận), cancelled, refunded
-    const eligiblePurchases = purchases.filter(
-      p => p.order_status !== 'pending' && p.order_status !== 'cancelled' && p.order_status !== 'refunded'
-    );
+    // Chỉ cho phép đánh giá nếu đơn hàng đã hoàn tất thành công (order_status === 'completed')
+    const completedPurchases = purchases.filter(p => p.order_status === 'completed');
 
-    if (eligiblePurchases.length === 0) {
-      const hasPending = purchases.some(p => p.order_status === 'pending');
-      if (hasPending) {
+    if (completedPurchases.length === 0) {
+      const activeOrder = purchases.find(p => ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order_status));
+      if (activeOrder) {
         return successResponse(res, {
           can_review: false,
           already_reviewed: false,
-          reason: 'order_pending',
-          message: 'Đơn hàng của bạn đang ở trạng thái Chờ xác nhận. Bạn chỉ có thể đánh giá sau khi đơn hàng được duyệt.'
+          reason: 'order_in_progress',
+          message: 'Đơn hàng của bạn đang được xử lý hoặc giao hàng. Bạn chỉ có thể đánh giá sau khi đã nhận hàng thành công (Trạng thái: Đã hoàn thành).'
         }, 'Trạng thái quyền đánh giá');
       }
 
@@ -106,7 +104,7 @@ async function checkEligibility(req, res, next) {
     return successResponse(res, {
       can_review: true,
       already_reviewed: false,
-      order_item_id: eligiblePurchases[0].order_item_id,
+      order_item_id: completedPurchases[0].order_item_id,
       message: 'Bạn đủ điều kiện đánh giá sản phẩm này.'
     }, 'Trạng thái quyền đánh giá');
   } catch (error) {
@@ -138,7 +136,7 @@ async function createReview(req, res, next) {
       return errorResponse(res, 'Bạn đã gửi đánh giá cho sản phẩm này rồi!', 400);
     }
 
-    // 2. Kiểm tra xem user đã mua sản phẩm này hay chưa (không cho phép trạng thái pending/cancelled/refunded)
+    // 2. Kiểm tra xem user đã mua sản phẩm này thành công (order_status = 'completed') hay chưa
     const [purchases] = await pool.query(`
       SELECT oi.order_item_id, o.order_status
       FROM orders o
@@ -157,26 +155,24 @@ async function createReview(req, res, next) {
     `, [userId, product_id]);
 
     if (purchases.length === 0) {
-      return errorResponse(res, 'Chỉ khách hàng đã mua sản phẩm này tại GearK mới có thể gửi đánh giá!', 403);
+      return errorResponse(res, 'Chỉ khách hàng đã mua và nhận sản phẩm thành công tại GearK mới có thể gửi nhận xét!', 403);
     }
 
-    const eligiblePurchases = purchases.filter(
-      p => p.order_status !== 'pending' && p.order_status !== 'cancelled' && p.order_status !== 'refunded'
-    );
+    const completedPurchases = purchases.filter(p => p.order_status === 'completed');
 
-    if (eligiblePurchases.length === 0) {
-      const hasPending = purchases.some(p => p.order_status === 'pending');
-      if (hasPending) {
+    if (completedPurchases.length === 0) {
+      const activeOrder = purchases.find(p => ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order_status));
+      if (activeOrder) {
         return errorResponse(
           res,
-          'Đơn hàng của bạn đang ở trạng thái "Chờ xác nhận". Bạn chỉ có thể gửi nhận xét sau khi đơn hàng được duyệt và xử lý!',
+          'Đơn hàng của bạn chưa hoàn tất. Bạn chỉ có thể gửi nhận xét sau khi đơn hàng đã được giao thành công (Trạng thái: Đã hoàn thành)!',
           400
         );
       }
-      return errorResponse(res, 'Đơn hàng chứa sản phẩm này đã bị hủy hoặc hoàn tiền nên không thể đánh giá!', 400);
+      return errorResponse(res, 'Đơn hàng chứa sản phẩm này đã bị hủy hoặc hoàn tiền nên không thể gửi nhận xét!', 400);
     }
 
-    const finalOrderItemId = order_item_id || eligiblePurchases[0].order_item_id || null;
+    const finalOrderItemId = order_item_id || completedPurchases[0].order_item_id || null;
 
     const [result] = await pool.query(
       `INSERT INTO reviews (user_id, product_id, order_item_id, rating, content)

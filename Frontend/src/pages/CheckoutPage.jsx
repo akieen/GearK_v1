@@ -7,7 +7,7 @@ import { orderApi } from '../api/cartApi';
 import { formatPrice } from '../utils/formatters';
 import Icons from '../components/common/Icons';
 
-export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
+export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) => {
   const { cart, cartTotal, fetchCart } = useCart();
   const { user, openAuthModal } = useAuth();
   const toast = useToast();
@@ -26,6 +26,27 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
+
+  // Always fetch latest cart on mount to ensure all items are loaded
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart]);
+
+  // Support coupon passed from CartPage or URL query
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const qs = hash.includes('?') ? hash.split('?')[1] : '';
+    const sp = new URLSearchParams(qs);
+    const cCode = initialCoupon || sp.get('coupon');
+    if (cCode && !appliedCoupon) {
+      setCouponCode(cCode);
+      couponApi.validateCoupon(cCode, cartTotal || 1).then((res) => {
+        if (res.success && res.data) {
+          setAppliedCoupon(res.data);
+        }
+      }).catch(() => {});
+    }
+  }, [initialCoupon, cartTotal, appliedCoupon]);
 
   // Fetch addresses
   useEffect(() => {
@@ -94,7 +115,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
         toast.success(`Áp dụng mã ${couponCode.toUpperCase()} thành công!`);
       }
     } catch (err) {
-      toast.error(err.message || 'Mã giảm giá không hợp lệ');
+      toast.error(err.message || 'Mã giảm giá không hợp lệ hoặc đã hết hạn');
     } finally {
       setValidatingCoupon(false);
     }
@@ -110,6 +131,11 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
       return;
     }
 
+    if (!cart.items || cart.items.length === 0) {
+      toast.warning('Giỏ hàng đang trống!');
+      return;
+    }
+
     setPlacingOrder(true);
     try {
       const payload = {
@@ -117,6 +143,10 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
         payment_method: paymentMethod,
         notes: orderNotes.trim(),
         coupon_code: appliedCoupon ? appliedCoupon.coupon_code : undefined,
+        items: cart.items.map((it) => ({
+          variant_id: it.variant_id,
+          quantity: it.quantity,
+        })),
       };
 
       const res = await orderApi.createOrder(payload);

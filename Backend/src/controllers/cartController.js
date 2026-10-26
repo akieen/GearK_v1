@@ -3,7 +3,7 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 
 // Helper to get or create cart for user
 async function getOrCreateCartId(userId, connection = pool) {
-  const [rows] = await connection.query('SELECT cart_id FROM carts WHERE user_id = ? LIMIT 1', [userId]);
+  const [rows] = await connection.query('SELECT cart_id FROM carts WHERE user_id = ? ORDER BY cart_id DESC LIMIT 1', [userId]);
   if (rows.length > 0) {
     return rows[0].cart_id;
   }
@@ -59,9 +59,20 @@ async function getCart(req, res, next) {
 async function addToCart(req, res, next) {
   try {
     const userId = req.user.user_id;
-    const { variant_id, quantity = 1 } = req.body;
+    let { variant_id, quantity = 1, product_id } = req.body;
 
-    if (!variant_id || quantity <= 0) {
+    // Fallback: If variant_id is not directly given but product_id is provided, pick default variant
+    if (!variant_id && product_id) {
+      const [vRows] = await pool.query(
+        'SELECT variant_id FROM product_variants WHERE product_id = ? ORDER BY price ASC LIMIT 1',
+        [product_id]
+      );
+      if (vRows.length > 0) {
+        variant_id = vRows[0].variant_id;
+      }
+    }
+
+    if (!variant_id || Number(quantity) <= 0) {
       return errorResponse(res, 'Vui lòng cung cấp mã phiên bản sản phẩm và số lượng hợp lệ', 400);
     }
 

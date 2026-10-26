@@ -33,50 +33,75 @@ async function createOrder(req, res, next) {
 
     // 2. Resolve Items
     let orderItemsData = [];
-    let isFromCart = false;
 
     if (Array.isArray(customItems) && customItems.length > 0) {
       orderItemsData = customItems;
     } else {
-      // Get from cart
+      // Get from the user's latest cart
+      const [userCarts] = await connection.query(
+        'SELECT cart_id FROM carts WHERE user_id = ? ORDER BY cart_id DESC LIMIT 1',
+        [userId]
+      );
+      if (userCarts.length === 0) {
+        await connection.rollback();
+        return errorResponse(res, 'Giỏ hàng của bạn đang trống, không thể tạo đơn hàng', 400);
+      }
+      const cartId = userCarts[0].cart_id;
+
       const [cartRows] = await connection.query(
         `SELECT ci.variant_id, ci.quantity 
          FROM cart_items ci
-         JOIN carts c ON ci.cart_id = c.cart_id
-         WHERE c.user_id = ?`,
-        [userId]
+         WHERE ci.cart_id = ?`,
+        [cartId]
       );
       if (cartRows.length === 0) {
+        await connection.rollback();
         return errorResponse(res, 'Giỏ hàng của bạn đang trống, không thể tạo đơn hàng', 400);
       }
       orderItemsData = cartRows;
-      isFromCart = true;
+    }
+
+    // Consolidate order items if any duplicate variants exist
+    const itemMap = new Map();
+    for (const item of orderItemsData) {
+      const vId = Number(item.variant_id);
+      const qty = Number(item.quantity) || 1;
+      if (!vId || qty <= 0) continue;
+      itemMap.set(vId, (itemMap.get(vId) || 0) + qty);
+    }
+
+    if (itemMap.size === 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Không có sản phẩm hợp lệ trong đơn hàng để thanh toán', 400);
     }
 
     // 3. Validate stock & calculate subtotal
     let subtotal = 0;
     const itemsToInsert = [];
 
-    for (const item of orderItemsData) {
+    for (const [variantId, quantity] of itemMap.entries()) {
       const [variantRows] = await connection.query(
         `SELECT v.variant_id, v.variant_name, v.price, v.sale_price, v.stock, p.product_name
          FROM product_variants v
          JOIN products p ON v.product_id = p.product_id
          WHERE v.variant_id = ? FOR UPDATE`,
-        [item.variant_id]
+        [variantId]
       );
 
       if (variantRows.length === 0) {
         await connection.rollback();
-        return errorResponse(res, `Sản phẩm với variant_id ${item.variant_id} không tồn tại`, 404);
+        return errorResponse(res, `Sản phẩm với mã phiên bản ${variantId} không tồn tại`, 404);
       }
 
       const variant = variantRows[0];
-      const quantity = Number(item.quantity);
 
       if (variant.stock < quantity) {
         await connection.rollback();
-        return errorResponse(res, `Sản phẩm "${variant.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho`, 400);
+        return errorResponse(
+          res,
+          `Sản phẩm "${variant.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho (bạn đặt ${quantity})`,
+          400
+        );
       }
 
       const unitPrice = variant.sale_price !== null ? Number(variant.sale_price) : Number(variant.price);
@@ -189,15 +214,13 @@ async function createOrder(req, res, next) {
       [orderId, payment_method, totalAmount]
     );
 
-    // 10. Clear cart if ordered from cart
-    if (isFromCart) {
-      await connection.query(
-        `DELETE ci FROM cart_items ci
-         JOIN carts c ON ci.cart_id = c.cart_id
-         WHERE c.user_id = ?`,
-        [userId]
-      );
-    }
+    // 10. Always clear cart for the user after checkout
+    await connection.query(
+      `DELETE ci FROM cart_items ci
+       JOIN carts c ON ci.cart_id = c.cart_id
+       WHERE c.user_id = ?`,
+      [userId]
+    );
 
     await connection.commit();
 
@@ -228,9 +251,14 @@ async function getUserOrders(req, res, next) {
     const userId = req.user.user_id;
 
     const [orders] = await pool.query(
-      `SELECT o.*, a.recipient_name, a.recipient_phone, a.street_address,
+      `SELECT o.*, 
+              COALESCE(a.recipient_name, u.full_name) AS recipient_name, 
+              a.recipient_phone, 
+              a.street_address,
+              a.street_address AS shipping_address,
               (SELECT payment_method FROM payments WHERE order_id = o.order_id ORDER BY payment_id DESC LIMIT 1) AS payment_method
        FROM orders o
+       JOIN users u ON o.user_id = u.user_id
        LEFT JOIN addresses a ON o.address_id = a.address_id
        WHERE o.user_id = ?
        ORDER BY o.created_at DESC`,
@@ -496,10 +524,72 @@ async function updateOrderStatus(req, res, next) {
   }
 }
 
+// [PUT] /api/orders/:id/cancel (Khách hàng tự hủy đơn khi đơn còn ở trạng thái pending)
+async function cancelOrder(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { id } = req.params;
+    const userId = req.user.user_id;
+
+    const [orders] = await connection.query(
+      'SELECT * FROM orders WHERE order_id = ? AND user_id = ? FOR UPDATE',
+      [id, userId]
+    );
+
+    if (orders.length === 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Không tìm thấy đơn hàng của bạn', 404);
+    }
+
+    const order = orders[0];
+    if (order.order_status !== 'pending') {
+      await connection.rollback();
+      return errorResponse(res, 'Chỉ có thể hủy đơn hàng đang ở trạng thái "Chờ xác nhận"', 400);
+    }
+
+    // Update status to cancelled
+    await connection.query(
+      'UPDATE orders SET order_status = "cancelled" WHERE order_id = ?',
+      [id]
+    );
+
+    // Record status history
+    await connection.query(
+      'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, ?, "cancelled")',
+      [id, userId, order.order_status]
+    );
+
+    // Restore inventory stock
+    const [items] = await connection.query(
+      'SELECT variant_id, quantity FROM order_items WHERE order_id = ?',
+      [id]
+    );
+    for (const item of items) {
+      if (item.variant_id) {
+        await connection.query(
+          'UPDATE product_variants SET stock = stock + ? WHERE variant_id = ?',
+          [item.quantity, item.variant_id]
+        );
+      }
+    }
+
+    await connection.commit();
+    return successResponse(res, null, 'Hủy đơn hàng thành công');
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   createOrder,
   getUserOrders,
   getOrderDetail,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  cancelOrder
 };

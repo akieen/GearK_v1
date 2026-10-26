@@ -88,7 +88,7 @@ export const CartDrawer = ({ onNavigate }) => {
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
                       <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 13.5 }}>
-                        {formatPrice(item.price)}
+                        {formatPrice(item.sale_price || item.price)}
                       </span>
                       <div className="quantity-control" style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}>
                         <button

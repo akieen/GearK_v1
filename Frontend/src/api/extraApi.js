@@ -15,6 +15,12 @@ export const couponApi = {
       body: JSON.stringify(data),
     }),
 
+  updateCoupon: (id, data) =>
+    request(`/coupons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   deleteCoupon: (id) =>
     request(`/coupons/${id}`, {
       method: 'DELETE',
@@ -24,10 +30,12 @@ export const couponApi = {
 export const reviewApi = {
   getProductReviews: (productId) => request(`/reviews/product/${productId}`),
 
-  createReview: (productId, rating, content) =>
+  checkEligibility: (productId) => request(`/reviews/check-eligibility/${productId}`),
+
+  createReview: (productId, rating, content, order_item_id) =>
     request('/reviews', {
       method: 'POST',
-      body: JSON.stringify({ product_id: productId, rating, content }),
+      body: JSON.stringify({ product_id: productId, rating, content, order_item_id }),
     }),
 
   deleteReview: (id) =>

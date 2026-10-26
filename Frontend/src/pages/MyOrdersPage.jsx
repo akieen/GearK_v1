@@ -1,34 +1,55 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { orderApi } from '../api/cartApi';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { formatPrice, formatDate, getOrderStatusText } from '../utils/formatters';
 import Icons from '../components/common/Icons';
 
 export const MyOrdersPage = ({ onNavigate }) => {
   const { user, openAuthModal } = useAuth();
+  const toast = useToast();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState(null);
+
+  const loadOrders = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const res = await orderApi.getMyOrders();
+      if (res.success && res.data) {
+        setOrders(res.data || []);
+      }
+    } catch (err) {
+      console.error('Lỗi lấy đơn hàng:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
       openAuthModal('login');
       return;
     }
-    const loadOrders = async () => {
-      setLoading(true);
-      try {
-        const res = await orderApi.getMyOrders();
-        if (res.success && res.data) {
-          setOrders(res.data || []);
-        }
-      } catch (err) {
-        console.error('Lỗi lấy đơn hàng:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadOrders();
-  }, [user]);
+  }, [user, loadOrders]);
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này không?')) return;
+    try {
+      setCancellingId(orderId);
+      const res = await orderApi.cancelOrder(orderId);
+      if (res.success) {
+        toast.info('Đã hủy đơn hàng thành công');
+        loadOrders();
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi hủy đơn hàng');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   if (!user) {
     return (
@@ -43,6 +64,7 @@ export const MyOrdersPage = ({ onNavigate }) => {
             borderRadius: 6,
             fontWeight: 700,
             marginTop: 14,
+            cursor: 'pointer',
           }}
         >
           Đăng nhập ngay
@@ -79,6 +101,7 @@ export const MyOrdersPage = ({ onNavigate }) => {
               padding: '10px 24px',
               borderRadius: 6,
               fontWeight: 700,
+              cursor: 'pointer',
             }}
           >
             Khám phá Gaming Gear ngay
@@ -149,7 +172,20 @@ export const MyOrdersPage = ({ onNavigate }) => {
                         }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, color: '#111827' }}>{item.product_name}</div>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            color: '#111827',
+                            cursor: item.product_slug ? 'pointer' : 'default',
+                          }}
+                          onClick={() => {
+                            if (item.product_slug) {
+                              onNavigate(`product/${item.product_slug}`);
+                            }
+                          }}
+                        >
+                          {item.product_name}
+                        </div>
                         {item.variant_name && (
                           <div style={{ fontSize: 11.5, color: '#6B7280' }}>Bản: {item.variant_name}</div>
                         )}
@@ -157,14 +193,34 @@ export const MyOrdersPage = ({ onNavigate }) => {
                           {item.quantity} × {formatPrice(item.unit_price)}
                         </div>
                       </div>
-                      <div style={{ fontWeight: 800, color: '#111827', fontSize: 14 }}>
-                        {formatPrice(parseFloat(item.unit_price) * item.quantity)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ fontWeight: 800, color: '#111827', fontSize: 14 }}>
+                          {formatPrice(parseFloat(item.unit_price) * item.quantity)}
+                        </div>
+                        {order.order_status === 'completed' && item.product_slug && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate(`product/${item.product_slug}`)}
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: 'var(--primary)',
+                              backgroundColor: '#FEE2E2',
+                              padding: '5px 10px',
+                              borderRadius: 6,
+                              cursor: 'pointer',
+                              border: 'none',
+                            }}
+                          >
+                            Đánh giá ngay
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Footer Total */}
+                {/* Footer Total & Actions */}
                 <div
                   style={{
                     display: 'flex',
@@ -176,14 +232,37 @@ export const MyOrdersPage = ({ onNavigate }) => {
                     gap: 12,
                   }}
                 >
-                  <div style={{ fontSize: 12.5, color: '#6B7280' }}>
-                    Giao tới: <strong>{order.recipient_name}</strong> ({order.recipient_phone}) - {order.shipping_address}
+                  <div style={{ fontSize: 12.5, color: '#6B7280', maxWidth: '60%' }}>
+                    Giao tới: <strong>{order.recipient_name || user.full_name}</strong> ({order.recipient_phone || '—'}) - {order.shipping_address || order.street_address || 'Địa chỉ giao hàng'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 13, color: '#4B5563' }}>Tổng số tiền:</span>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--primary)' }}>
-                      {formatPrice(order.total_amount)}
-                    </span>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: '#4B5563' }}>Tổng số tiền:</span>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--primary)' }}>
+                        {formatPrice(order.total_amount)}
+                      </span>
+                    </div>
+
+                    {order.order_status === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={cancellingId === order.order_id}
+                        onClick={() => handleCancelOrder(order.order_id)}
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          color: '#EF4444',
+                          border: '1px solid #FECACA',
+                          backgroundColor: '#FEF2F2',
+                          padding: '6px 14px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {cancellingId === order.order_id ? 'Đang hủy...' : 'Hủy đơn hàng'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
