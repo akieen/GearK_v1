@@ -171,8 +171,19 @@ export const CartProvider = ({ children }) => {
 
   const isInWishlist = (productId) => wishlistIds.has(productId);
 
-  const cartCount = cart.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-  const cartTotal = cart.total_amount || 0;
+  const cartCount = cart.items?.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) || 0;
+  
+  const calculateItemsTotal = (items = []) => {
+    return items.reduce((sum, item) => {
+      const price = parseFloat(item.sale_price ?? item.price ?? 0);
+      return sum + price * (Number(item.quantity) || 1);
+    }, 0);
+  };
+
+  const rawTotal = cart.total_amount ?? cart.subtotal;
+  const cartTotal = (rawTotal !== undefined && rawTotal !== null && Number(rawTotal) > 0)
+    ? Number(rawTotal)
+    : calculateItemsTotal(cart.items);
 
   return (
     <CartContext.Provider

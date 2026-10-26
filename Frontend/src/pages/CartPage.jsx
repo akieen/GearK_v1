@@ -13,6 +13,16 @@ export const CartPage = ({ onNavigate }) => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
+  // Compute subtotal with fallback to items calculation
+  const itemsSubtotal = (cart.items || []).reduce((sum, item) => {
+    const itemPrice = parseFloat(item.sale_price ?? item.price ?? 0);
+    return sum + itemPrice * (Number(item.quantity) || 1);
+  }, 0);
+
+  const subtotal = (cartTotal && cartTotal > 0)
+    ? cartTotal
+    : (Number(cart.total_amount ?? cart.subtotal) || itemsSubtotal);
+
   const handleApplyCoupon = async (e) => {
     e.preventDefault();
     if (!couponCode.trim()) {
@@ -21,7 +31,7 @@ export const CartPage = ({ onNavigate }) => {
     }
     setValidatingCoupon(true);
     try {
-      const res = await couponApi.validateCoupon(couponCode.trim(), cartTotal);
+      const res = await couponApi.validateCoupon(couponCode.trim(), subtotal);
       if (res.success && res.data) {
         setAppliedCoupon(res.data);
         toast.success(`Áp dụng mã ${couponCode.toUpperCase()} thành công!`);
@@ -36,7 +46,7 @@ export const CartPage = ({ onNavigate }) => {
   };
 
   const discountAmount = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
-  const finalTotal = Math.max(0, cartTotal - discountAmount);
+  const finalTotal = Math.max(0, subtotal - discountAmount);
 
   if (!cart.items || cart.items.length === 0) {
     return (
@@ -139,8 +149,13 @@ export const CartPage = ({ onNavigate }) => {
                   </button>
                 </div>
 
-                <div className="cart-item-price">
-                  {formatPrice(parseFloat(item.price) * item.quantity)}
+                <div className="cart-item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                  <span>{formatPrice((parseFloat(item.sale_price || item.price) || 0) * item.quantity)}</span>
+                  {item.sale_price && parseFloat(item.sale_price) < parseFloat(item.price) && (
+                    <span style={{ fontSize: 11.5, color: '#9CA3AF', textDecoration: 'line-through', fontWeight: 500 }}>
+                      {formatPrice((parseFloat(item.price) || 0) * item.quantity)}
+                    </span>
+                  )}
                 </div>
 
                 <button
@@ -206,7 +221,7 @@ export const CartPage = ({ onNavigate }) => {
 
           <div className="summary-row">
             <span>Tạm tính:</span>
-            <span style={{ fontWeight: 700 }}>{formatPrice(cartTotal)}</span>
+            <span style={{ fontWeight: 700 }}>{formatPrice(subtotal)}</span>
           </div>
 
           {appliedCoupon && (

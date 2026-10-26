@@ -32,7 +32,7 @@ const priceFilters = [
 ];
 
 export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
-  const { user, isAdmin, isStaff, logout, openAuthModal, quickLogin } = useAuth();
+  const { user, isStaff, logout, openAuthModal, quickLogin } = useAuth();
   const { cartCount, wishlistCount, setIsCartDrawerOpen } = useCart();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,7 +164,7 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
 
     const timer = setTimeout(async () => {
       try {
-        setSearchLoading(true);
+
         const res = await productApi.getProducts({ search: searchQuery.trim(), limit: 5 });
         if (res.success && res.data) {
           setSearchResults(res.data.items || []);
@@ -194,7 +194,7 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
       <div className="topbar">
         <div className="container topbar-content">
           <div className="topbar-left">
-        
+
           </div>
 
           <div className="topbar-right">
@@ -310,9 +310,6 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                               {getCategoryIcon(cat.slug, cat.category_name)}
                             </span>
                             <span className="category-sidebar-name">{cat.category_name}</span>
-                            {cat.product_count !== undefined && cat.product_count > 0 && (
-                              <span className="category-sidebar-count">{cat.product_count}</span>
-                            )}
                             <Icons.ChevronRight size={14} className="category-sidebar-arrow" />
                           </div>
                         );
@@ -366,11 +363,7 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                                 onClick={() => handleCategoryClick(sub.slug)}
                               >
                                 <span>{sub.category_name}</span>
-                                {sub.product_count > 0 && (
-                                  <span className="category-sub-count">
-                                    ({sub.product_count})
-                                  </span>
-                                )}
+
                               </div>
                             ))}
                           </div>
@@ -695,17 +688,6 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
             }}
           >
             🔥 Khuyến Mãi Hot
-          </a>
-
-          <a
-            href="#build-pc"
-            className="sub-nav-item"
-            onClick={(e) => {
-              e.preventDefault();
-              onNavigate('products?category=chuot-gaming');
-            }}
-          >
-            Setup Gaming
           </a>
         </div>
       </nav>

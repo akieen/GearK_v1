@@ -47,7 +47,8 @@ async function getCart(req, res, next) {
       cart_id: cartId,
       items,
       total_items: totalItems,
-      subtotal
+      subtotal,
+      total_amount: subtotal
     }, 'Lấy thông tin giỏ hàng thành công');
   } catch (error) {
     next(error);

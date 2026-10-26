@@ -387,10 +387,12 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted }) => {
                     <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {item.product_name}
                     </div>
-                    <div style={{ color: '#6B7280' }}>SL: {item.quantity} × {formatPrice(item.price)}</div>
+                    <div style={{ color: '#6B7280' }}>
+                      SL: {item.quantity} × {formatPrice(item.sale_price || item.price)}
+                    </div>
                   </div>
                   <div style={{ fontWeight: 800, color: 'var(--primary)' }}>
-                    {formatPrice(parseFloat(item.price) * item.quantity)}
+                    {formatPrice((parseFloat(item.sale_price || item.price) || 0) * item.quantity)}
                   </div>
                 </div>
               ))}

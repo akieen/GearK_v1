@@ -556,8 +556,8 @@ async function updateVariant(req, res, next) {
       return errorResponse(res, 'Phiên bản không tồn tại', 404);
     }
 
-    const specs = specifications !== undefined 
-      ? normalizeSpecifications(specifications) 
+    const specs = specifications !== undefined
+      ? normalizeSpecifications(specifications)
       : existing[0].specifications;
 
     await pool.query(
