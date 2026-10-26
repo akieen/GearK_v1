@@ -8,8 +8,9 @@ router.post('/login', authController.login);
 router.get('/profile', verifyToken, authController.getProfile);
 router.put('/profile', verifyToken, authController.updateProfile);
 
-// Admin user management
+// Admin user & staff management (Admin only)
 router.get('/users', verifyToken, requireRoles('admin'), authController.getAllUsers);
+router.post('/staff', verifyToken, requireRoles('admin'), authController.createStaff);
 router.put('/users/:id/role', verifyToken, requireRoles('admin'), authController.updateUserRole);
 
 module.exports = router;

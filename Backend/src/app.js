@@ -8,11 +8,22 @@ const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
 
+// Tắt hoàn toàn ETag để ngăn Express tự động trả về 304 Not Modified
+app.set('etag', false);
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Vô hiệu hóa cache cho toàn bộ API để mọi request GET luôn trả về 200 OK với dữ liệu mới nhất
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 
 // Static files for uploaded images
 const uploadsDir = path.join(__dirname, '../public/uploads');

@@ -180,10 +180,114 @@ async function updateProfile(req, res, next) {
 // [GET] /api/auth/users (Admin only)
 async function getAllUsers(req, res, next) {
   try {
+    const { role, search } = req.query;
+    const whereConditions = [];
+    const params = [];
+
+    if (role && role !== 'all') {
+      whereConditions.push('role = ?');
+      params.push(role);
+    }
+
+    if (search && search.trim() !== '') {
+      whereConditions.push('(full_name LIKE ? OR email LIKE ?)');
+      const kw = `%${search.trim()}%`;
+      params.push(kw, kw);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
     const [users] = await pool.query(
-      'SELECT user_id, full_name, email, role, created_at, updated_at FROM users ORDER BY user_id DESC'
+      `SELECT user_id, full_name, email, role, created_at, updated_at 
+       FROM users 
+       ${whereClause} 
+       ORDER BY user_id DESC`,
+      params
     );
-    return successResponse(res, users, 'Danh sách người dùng');
+
+    const [summaryRows] = await pool.query(`
+      SELECT 
+        COUNT(*) AS total_users,
+        SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS total_admins,
+        SUM(CASE WHEN role = 'staff' THEN 1 ELSE 0 END) AS total_staff,
+        SUM(CASE WHEN role = 'customer' THEN 1 ELSE 0 END) AS total_customers
+      FROM users
+    `);
+
+    return successResponse(
+      res,
+      {
+        items: users,
+        summary: {
+          total_users: Number(summaryRows[0].total_users) || 0,
+          total_admins: Number(summaryRows[0].total_admins) || 0,
+          total_staff: Number(summaryRows[0].total_staff) || 0,
+          total_customers: Number(summaryRows[0].total_customers) || 0,
+        }
+      },
+      'Danh sách người dùng và nhân viên'
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [POST] /api/auth/staff (Admin only)
+async function createStaff(req, res, next) {
+  try {
+    const { full_name, email, password } = req.body;
+
+    if (!full_name || !email || !password) {
+      return errorResponse(res, 'Vui lòng cung cấp đầy đủ họ tên, email và mật khẩu cho nhân viên', 400);
+    }
+
+    if (password.length < 6) {
+      return errorResponse(res, 'Mật khẩu phải chứa ít nhất 6 ký tự', 400);
+    }
+
+    // Check existing email
+    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ? LIMIT 1', [email.trim()]);
+    if (existing.length > 0) {
+      return errorResponse(res, 'Email này đã tồn tại trên hệ thống', 409);
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [userResult] = await connection.query(
+        'INSERT INTO users (full_name, email, password_hash, role) VALUES (?, ?, ?, "staff")',
+        [full_name.trim(), email.trim(), password_hash]
+      );
+      const userId = userResult.insertId;
+
+      // Initialize cart and wishlist
+      await connection.query('INSERT INTO carts (user_id) VALUES (?)', [userId]);
+      await connection.query('INSERT INTO wishlists (user_id) VALUES (?)', [userId]);
+
+      await connection.commit();
+
+      return successResponse(
+        res,
+        {
+          user_id: userId,
+          full_name: full_name.trim(),
+          email: email.trim(),
+          role: 'staff'
+        },
+        'Tạo tài khoản nhân viên (Staff) thành công',
+        201
+      );
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     next(error);
   }
@@ -194,13 +298,30 @@ async function updateUserRole(req, res, next) {
   try {
     const { id } = req.params;
     const { role } = req.body;
+    const targetId = parseInt(id, 10);
 
     if (!['customer', 'staff', 'admin'].includes(role)) {
       return errorResponse(res, 'Vai trò không hợp lệ (customer, staff, admin)', 400);
     }
 
-    await pool.query('UPDATE users SET role = ? WHERE user_id = ?', [role, id]);
-    return successResponse(res, null, 'Cập nhật quyền người dùng thành công');
+    const [existing] = await pool.query('SELECT role, full_name FROM users WHERE user_id = ?', [targetId]);
+    if (existing.length === 0) {
+      return errorResponse(res, 'Người dùng không tồn tại', 404);
+    }
+
+    if (req.user.user_id === targetId && role !== 'admin') {
+      return errorResponse(res, 'Bạn không thể tự hạ quyền Admin của chính mình', 400);
+    }
+
+    if (existing[0].role === 'admin' && role !== 'admin') {
+      const [adminCount] = await pool.query('SELECT COUNT(*) AS total FROM users WHERE role = "admin"');
+      if (adminCount[0].total <= 1) {
+        return errorResponse(res, 'Hệ thống cần ít nhất 1 Admin, không thể hạ quyền Admin duy nhất', 400);
+      }
+    }
+
+    await pool.query('UPDATE users SET role = ? WHERE user_id = ?', [role, targetId]);
+    return successResponse(res, { user_id: targetId, role }, `Cập nhật vai trò thành công cho "${existing[0].full_name}" sang ${role}`);
   } catch (error) {
     next(error);
   }
@@ -212,5 +333,6 @@ module.exports = {
   getProfile,
   updateProfile,
   getAllUsers,
-  updateUserRole
+  createStaff,
+  updateUserRole,
 };

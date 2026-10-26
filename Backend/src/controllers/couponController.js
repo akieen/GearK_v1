@@ -30,8 +30,19 @@ async function validateCoupon(req, res, next) {
     }
 
     const coupon = rows[0];
+    const now = new Date();
 
-    // Kiểm tra giới hạn lượt dùng
+    // 1. Kiểm tra ngày bắt đầu hiệu lực
+    if (coupon.start_date && new Date(coupon.start_date) > now) {
+      return errorResponse(res, `Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(coupon.start_date).toLocaleDateString('vi-VN')})`, 400);
+    }
+
+    // 2. Kiểm tra ngày hết hạn
+    if (coupon.end_date && new Date(coupon.end_date) < now) {
+      return errorResponse(res, `Mã giảm giá đã hết hạn sử dụng (hết hạn lúc ${new Date(coupon.end_date).toLocaleDateString('vi-VN')})`, 400);
+    }
+
+    // 3. Kiểm tra giới hạn lượt dùng
     if (coupon.usage_limit !== null && coupon.used_count >= coupon.usage_limit) {
       return errorResponse(res, 'Mã giảm giá đã hết lượt sử dụng', 400);
     }
@@ -55,7 +66,9 @@ async function validateCoupon(req, res, next) {
       discount_amount: discountAmount,
       final_amount: Math.max(0, subtotal - discountAmount),
       used_count: coupon.used_count,
-      usage_limit: coupon.usage_limit
+      usage_limit: coupon.usage_limit,
+      start_date: coupon.start_date,
+      end_date: coupon.end_date,
     }, 'Áp dụng mã giảm giá thành công');
   } catch (error) {
     next(error);
@@ -65,7 +78,7 @@ async function validateCoupon(req, res, next) {
 // [POST] /api/coupons (Admin only)
 async function createCoupon(req, res, next) {
   try {
-    const { coupon_code, discount_type, discount_value, usage_limit } = req.body;
+    const { coupon_code, discount_type, discount_value, usage_limit, start_date, end_date } = req.body;
 
     if (!coupon_code || !discount_type || discount_value === undefined) {
       return errorResponse(res, 'Vui lòng điền mã code, loại giảm giá (percent/fixed) và giá trị giảm', 400);
@@ -76,10 +89,23 @@ async function createCoupon(req, res, next) {
     }
 
     const limitValue = usage_limit !== undefined && usage_limit !== '' ? Number(usage_limit) : null;
+    const startDateVal = start_date ? new Date(start_date) : null;
+    const endDateVal = end_date ? new Date(end_date) : null;
+
+    if (startDateVal && endDateVal && startDateVal > endDateVal) {
+      return errorResponse(res, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu', 400);
+    }
 
     const [result] = await pool.query(
-      'INSERT INTO coupons (coupon_code, discount_type, discount_value, usage_limit) VALUES (?, ?, ?, ?)',
-      [coupon_code.trim().toUpperCase(), discount_type, Number(discount_value), limitValue]
+      'INSERT INTO coupons (coupon_code, discount_type, discount_value, usage_limit, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
+      [
+        coupon_code.trim().toUpperCase(),
+        discount_type,
+        Number(discount_value),
+        limitValue,
+        startDateVal,
+        endDateVal
+      ]
     );
 
     return successResponse(res, { coupon_id: result.insertId }, 'Tạo mã giảm giá thành công', 201);

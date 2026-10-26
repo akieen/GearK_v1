@@ -105,6 +105,18 @@ async function createOrder(req, res, next) {
       );
       if (coupons.length > 0) {
         const cp = coupons[0];
+        const now = new Date();
+
+        // Kiểm tra thời hạn hiệu lực của mã
+        if (cp.start_date && new Date(cp.start_date) > now) {
+          await connection.rollback();
+          return errorResponse(res, `Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(cp.start_date).toLocaleDateString('vi-VN')})`, 400);
+        }
+        if (cp.end_date && new Date(cp.end_date) < now) {
+          await connection.rollback();
+          return errorResponse(res, 'Mã giảm giá đã hết hạn sử dụng', 400);
+        }
+
         // Kiểm tra giới hạn lượt dùng
         if (cp.usage_limit !== null && cp.used_count >= cp.usage_limit) {
           await connection.rollback();

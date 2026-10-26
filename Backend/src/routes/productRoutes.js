@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const productController = require('../controllers/productController');
+const variantController = require('../controllers/variantController');
 const { verifyToken, requireRoles } = require('../middlewares/auth');
 const { upload } = require('../middlewares/upload');
 const { errorResponse } = require('../utils/helpers');
@@ -51,27 +52,27 @@ router.post(
 router.delete('/images/:imageId', verifyToken, requireRoles('admin', 'staff'), productController.deleteProductImage);
 router.put('/images/:imageId/primary', verifyToken, requireRoles('admin', 'staff'), productController.setPrimaryProductImage);
 
-// Admin variant management
+// Admin / Staff variant management (using separated variantController)
 router.post(
   '/:id/variants',
   verifyToken,
   requireRoles('admin', 'staff'),
   handleUpload(upload.any()),
-  productController.addVariant
+  variantController.addVariant
 );
-router.put('/variants/:variantId', verifyToken, requireRoles('admin', 'staff'), productController.updateVariant);
-router.delete('/variants/:variantId', verifyToken, requireRoles('admin'), productController.deleteVariant);
+router.put('/variants/:variantId', verifyToken, requireRoles('admin', 'staff'), variantController.updateVariant);
+router.delete('/variants/:variantId', verifyToken, requireRoles('admin'), variantController.deleteVariant);
 
 // Variant images endpoints
-router.get('/variants/:variantId/images', productController.getVariantImages);
+router.get('/variants/:variantId/images', variantController.getVariantImages);
 router.post(
   '/variants/:variantId/images',
   verifyToken,
   requireRoles('admin', 'staff'),
   handleUpload(upload.any()),
-  productController.addVariantImage
+  variantController.addVariantImage
 );
-router.delete('/variants/images/:imageId', verifyToken, requireRoles('admin', 'staff'), productController.deleteVariantImage);
-router.put('/variants/images/:imageId/primary', verifyToken, requireRoles('admin', 'staff'), productController.setPrimaryVariantImage);
+router.delete('/variants/images/:imageId', verifyToken, requireRoles('admin', 'staff'), variantController.deleteVariantImage);
+router.put('/variants/images/:imageId/primary', verifyToken, requireRoles('admin', 'staff'), variantController.setPrimaryVariantImage);
 
 module.exports = router;
