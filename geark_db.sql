@@ -867,6 +867,13 @@ ALTER TABLE `wishlists`
 ALTER TABLE `wishlist_items`
   ADD CONSTRAINT `fk_wishlist_items_variant` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`variant_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_wishlist_items_wishlist` FOREIGN KEY (`wishlist_id`) REFERENCES `wishlists` (`wishlist_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Additional columns for table `coupons`
+--
+ALTER TABLE `coupons`
+  ADD COLUMN `start_date` DATETIME NULL,
+  ADD COLUMN `end_date` DATETIME NULL;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
