@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { productApi } from '../../api/productApi';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { productApi, uploadApi } from '../../api/productApi';
 import { useToast } from '../../context/ToastContext';
+import ImageUploadField from '../../components/common/ImageUploadField';
+import { generateSku } from '../../utils/formatters';
 
 export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onNavigate, targetProductId }) {
   const toast = useToast();
@@ -11,6 +13,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   // Form add variant
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSku, setNewSku] = useState('');
+  const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
   const [newVariantName, setNewVariantName] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newSalePrice, setNewSalePrice] = useState('');
@@ -20,7 +23,31 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
     { key: 'Màu sắc', value: '' },
     { key: 'Bảo hành', value: '24 tháng' },
   ]);
+  const [newVariantImages, setNewVariantImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Auto-generate SKU when variant name changes or form opens
+  useEffect(() => {
+    if (!skuManuallyEdited && showAddForm) {
+      const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
+      if (prodName || newVariantName) {
+        setNewSku(generateSku(prodName, newVariantName));
+      }
+    }
+  }, [newVariantName, showAddForm, skuManuallyEdited, productDetail, selectedProductId, products]);
+
+  const handleRegenerateSku = () => {
+    const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
+    setNewSku(generateSku(prodName, newVariantName));
+    setSkuManuallyEdited(false);
+  };
+
+  // Managing Variant Images Modal
+  const [managingVariantImages, setManagingVariantImages] = useState(null);
+  const [uploadingVariantImg, setUploadingVariantImg] = useState(false);
+  const variantFileInputRef = useRef(null);
+  const [customImageUrl, setCustomImageUrl] = useState('');
+  const [showAddUrlInput, setShowAddUrlInput] = useState(false);
 
   // Quick edit variant modal/state
   const [editingVariant, setEditingVariant] = useState(null);
@@ -136,20 +163,25 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
 
     setSubmitting(true);
     try {
+      const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
+      const finalSku = (newSku.trim() || generateSku(prodName, newVariantName)).toUpperCase();
+
       const payload = {
-        sku: newSku.trim() || `VAR-${selectedProductId}-${Date.now().toString().slice(-4)}`,
+        sku: finalSku,
         variant_name: newVariantName.trim(),
         price: parseFloat(newPrice),
         sale_price: newSalePrice ? parseFloat(newSalePrice) : null,
         stock: parseInt(newStock) || 0,
         warranty_months: parseInt(newWarranty) || 12,
         specifications: parseSpecsToObj(newSpecsList),
+        images: newVariantImages,
       };
 
       const res = await productApi.addVariant(selectedProductId, payload);
       if (res.success) {
-        toast.success(`Đã thêm biến thể "${newVariantName.trim()}" kèm thông số!`);
+        toast.success(`Đã thêm biến thể "${newVariantName.trim()}" kèm danh sách ảnh!`);
         setNewSku('');
+        setSkuManuallyEdited(false);
         setNewVariantName('');
         setNewPrice('');
         setNewSalePrice('');
@@ -158,6 +190,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
           { key: 'Màu sắc', value: '' },
           { key: 'Bảo hành', value: '24 tháng' },
         ]);
+        setNewVariantImages([]);
         setShowAddForm(false);
         fetchVariants(selectedProductId);
       }
@@ -165,6 +198,90 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
       toast.error(err.message || 'Lỗi thêm biến thể');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Variant Image Management Actions
+  const handleAddImagesToVariant = async (files) => {
+    if (!managingVariantImages || !files || files.length === 0) return;
+    setUploadingVariantImg(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await productApi.addVariantImage(managingVariantImages.variant_id, files[i]);
+      }
+      toast.success(`Đã thêm ${files.length} ảnh cho biến thể thành công!`);
+      await fetchVariants(selectedProductId);
+      const res = await productApi.getProductById(selectedProductId);
+      if (res.success && res.data) {
+        const updated = res.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
+        if (updated) setManagingVariantImages(updated);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi khi tải ảnh biến thể lên bằng Multer');
+    } finally {
+      setUploadingVariantImg(false);
+      if (variantFileInputRef.current) variantFileInputRef.current.value = '';
+    }
+  };
+
+  const handleAddImageUrlToVariant = async (e) => {
+    e.preventDefault();
+    if (!managingVariantImages || !customImageUrl.trim()) return;
+    setUploadingVariantImg(true);
+    try {
+      await productApi.addVariantImage(managingVariantImages.variant_id, { image_url: customImageUrl.trim() });
+      toast.success('Đã thêm ảnh cho biến thể thành công!');
+      setCustomImageUrl('');
+      setShowAddUrlInput(false);
+      await fetchVariants(selectedProductId);
+      const res = await productApi.getProductById(selectedProductId);
+      if (res.success && res.data) {
+        const updated = res.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
+        if (updated) setManagingVariantImages(updated);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi thêm ảnh biến thể');
+    } finally {
+      setUploadingVariantImg(false);
+    }
+  };
+
+  const handleSetPrimaryVariantImage = async (imageId) => {
+    try {
+      const res = await productApi.setPrimaryVariantImage(imageId);
+      if (res.success) {
+        toast.success('Đã đặt làm ảnh chính của biến thể!');
+        await fetchVariants(selectedProductId);
+        if (managingVariantImages) {
+          const vRes = await productApi.getProductById(selectedProductId);
+          if (vRes.success && vRes.data) {
+            const updated = vRes.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
+            if (updated) setManagingVariantImages(updated);
+          }
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi đặt ảnh chính');
+    }
+  };
+
+  const handleDeleteVariantImage = async (imageId) => {
+    if (!window.confirm('Bạn có chắc muốn xóa ảnh này khỏi danh sách ảnh biến thể?')) return;
+    try {
+      const res = await productApi.deleteVariantImage(imageId);
+      if (res.success) {
+        toast.success('Đã xóa ảnh biến thể thành công!');
+        await fetchVariants(selectedProductId);
+        if (managingVariantImages) {
+          const vRes = await productApi.getProductById(selectedProductId);
+          if (vRes.success && vRes.data) {
+            const updated = vRes.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
+            if (updated) setManagingVariantImages(updated);
+          }
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi xóa ảnh biến thể');
     }
   };
 
@@ -505,14 +622,45 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
               </div>
 
               <div className="form-group">
-                <label className="form-label">Mã SKU (Tùy chọn)</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <label className="form-label" style={{ margin: 0 }}>
+                    Mã SKU <span style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 600 }}>(Tự động sinh)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRegenerateSku}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#6366F1',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      padding: '2px 4px',
+                    }}
+                    title="Tự động tạo mã SKU mới theo tên sản phẩm"
+                  >
+                    <Icons.Sparkles size={13} />
+                    Tự sinh mã
+                  </button>
+                </div>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="VD: RZ-VIPER-WHT"
+                  placeholder="VD: RZ-VIPER-TRANG-8K2A"
                   value={newSku}
-                  onChange={(e) => setNewSku(e.target.value)}
+                  onChange={(e) => {
+                    setSkuManuallyEdited(true);
+                    setNewSku(e.target.value.toUpperCase());
+                  }}
+                  style={{ fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.5px' }}
                 />
+                <span style={{ fontSize: '0.72rem', color: '#6B7280', display: 'block', marginTop: 3 }}>
+                  *Mã SKU định danh duy nhất. Tự động sinh theo tên biến thể hoặc có thể tự nhập.
+                </span>
               </div>
 
               <div className="form-group">
@@ -567,6 +715,17 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
 
             {/* Specifications Key-Value Builder */}
             {renderSpecsEditor(newSpecsList, setNewSpecsList)}
+
+            {/* Variant Images Upload (Multer) */}
+            <div style={{ marginTop: 14 }}>
+              <ImageUploadField
+                label="Danh sách hình ảnh biến thể (Multer File Upload)"
+                value={newVariantImages}
+                onChange={setNewVariantImages}
+                multiple={true}
+                hint="Tải lên một hoặc nhiều tệp ảnh riêng cho biến thể này (Multer)"
+              />
+            </div>
 
             <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button
@@ -638,6 +797,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
               <tr>
                 <th>SKU</th>
                 <th>Tên biến thể</th>
+                <th>Ảnh biến thể</th>
                 <th>Thông số kỹ thuật (JSON Specifications)</th>
                 <th>Giá niêm yết</th>
                 <th>Giá khuyến mãi</th>
@@ -649,7 +809,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
             <tbody>
               {(!productDetail?.variants || productDetail.variants.length === 0) ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
                     Chưa có biến thể nào cho sản phẩm này
                   </td>
                 </tr>
@@ -675,6 +835,84 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
                       </td>
                       <td style={{ fontWeight: 700 }}>
                         {v.variant_name}
+                      </td>
+                      {/* Variant Images Gallery Column */}
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            {v.images && v.images.length > 0 ? (
+                              v.images.slice(0, 3).map((img, idx) => (
+                                <div
+                                  key={img.image_id || idx}
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 4,
+                                    border: img.is_primary ? '2px solid var(--primary)' : '1px solid #D1D5DB',
+                                    overflow: 'hidden',
+                                    backgroundColor: '#FFF',
+                                    position: 'relative',
+                                  }}
+                                  title={img.is_primary ? 'Ảnh chính của biến thể' : 'Ảnh biến thể'}
+                                >
+                                  <img
+                                    src={img.image_url}
+                                    alt=""
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                  />
+                                  {img.is_primary === 1 && (
+                                    <span
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        backgroundColor: 'var(--primary)',
+                                        color: '#FFF',
+                                        fontSize: 7,
+                                        textAlign: 'center',
+                                        fontWeight: 900,
+                                      }}
+                                    >
+                                      CHÍNH
+                                    </span>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <span style={{ fontSize: 11, color: '#9CA3AF' }}>Chưa có</span>
+                            )}
+                            {v.images && v.images.length > 3 && (
+                              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>
+                                +{v.images.length - 3}
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setManagingVariantImages(v)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '4px 8px',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              backgroundColor: '#F3F4F6',
+                              color: '#1F2937',
+                              border: '1px solid #D1D5DB',
+                              cursor: 'pointer',
+                              marginLeft: 4,
+                              whiteSpace: 'nowrap',
+                            }}
+                            title="Quản lý danh sách ảnh của biến thể này"
+                          >
+                            <Icons.Camera size={13} />
+                            <span>Ảnh ({v.images?.length || 0})</span>
+                          </button>
+                        </div>
                       </td>
                       {/* Specifications column */}
                       <td>
@@ -883,6 +1121,332 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Variant Images Manager (Quản lý danh sách ảnh biến thể) */}
+      {managingVariantImages && (
+        <div className="modal-overlay" onClick={() => setManagingVariantImages(null)}>
+          <div
+            className="modal-card"
+            style={{ maxWidth: 660, maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    backgroundColor: 'rgba(227, 0, 25, 0.1)',
+                    color: 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icons.Camera size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ margin: 0, fontSize: 16 }}>
+                    Quản lý danh sách ảnh biến thể
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>
+                    Biến thể: <strong>{managingVariantImages.variant_name}</strong> (SKU: {managingVariantImages.sku})
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManagingVariantImages(null)}
+                style={{ color: '#6B7280', cursor: 'pointer', background: 'none', border: 'none' }}
+              >
+                <Icons.X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Multer Upload Section */}
+              <div
+                style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '2px dashed #CBD5E1',
+                  borderRadius: 8,
+                  padding: 16,
+                  textAlign: 'center',
+                  marginBottom: 18,
+                }}
+              >
+                <input
+                  ref={variantFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={(e) => handleAddImagesToVariant(e.target.files)}
+                />
+
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    backgroundColor: uploadingVariantImg ? '#EFF6FF' : '#FEE2E2',
+                    color: uploadingVariantImg ? '#2563EB' : 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 8px auto',
+                  }}
+                >
+                  {uploadingVariantImg ? (
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        border: '2px solid #2563EB',
+                        borderTopColor: 'transparent',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }}
+                    />
+                  ) : (
+                    <Icons.Upload size={20} />
+                  )}
+                </div>
+
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
+                  {uploadingVariantImg ? 'Đang tải ảnh lên server bằng Multer...' : 'Tải lên ảnh mới cho biến thể này'}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2, marginBottom: 10 }}>
+                  Hỗ trợ: JPG, PNG, WEBP, GIF, SVG (Tối đa 10MB/ảnh)
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={uploadingVariantImg}
+                    onClick={() => variantFileInputRef.current?.click()}
+                    style={{
+                      backgroundColor: 'var(--primary)',
+                      color: '#FFF',
+                      padding: '7px 16px',
+                      borderRadius: 6,
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: uploadingVariantImg ? 'wait' : 'pointer',
+                    }}
+                  >
+                    <Icons.Upload size={14} />
+                    <span>Chọn tệp ảnh từ máy tính</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUrlInput(!showAddUrlInput)}
+                    style={{
+                      backgroundColor: '#FFF',
+                      color: '#374151',
+                      border: '1px solid #D1D5DB',
+                      padding: '7px 14px',
+                      borderRadius: 6,
+                      fontWeight: 600,
+                      fontSize: 12.5,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showAddUrlInput ? 'Ẩn link URL' : 'Thêm bằng URL'}
+                  </button>
+                </div>
+
+                {/* Add Image by URL input */}
+                {showAddUrlInput && (
+                  <form onSubmit={handleAddImageUrlToVariant} style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                    <input
+                      type="url"
+                      required
+                      className="form-input"
+                      placeholder="https://images.unsplash.com/photo-..."
+                      value={customImageUrl}
+                      onChange={(e) => setCustomImageUrl(e.target.value)}
+                      style={{ flex: 1, fontSize: 12.5 }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={uploadingVariantImg}
+                      style={{
+                        backgroundColor: '#10B981',
+                        color: '#FFF',
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        fontSize: 12,
+                      }}
+                    >
+                      Thêm URL
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* Existing Variant Images Grid */}
+              <div style={{ marginBottom: 12 }}>
+                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1F2937', marginBottom: 10 }}>
+                  Danh sách ảnh hiện tại ({managingVariantImages.images?.length || 0} ảnh)
+                </h4>
+
+                {(!managingVariantImages.images || managingVariantImages.images.length === 0) ? (
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: 'center',
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: 6,
+                      border: '1px solid #E5E7EB',
+                      color: '#6B7280',
+                      fontSize: 13,
+                    }}
+                  >
+                    Biến thể này chưa có hình ảnh nào. Hãy chọn tệp ảnh ở trên để tải lên!
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
+                      gap: 12,
+                    }}
+                  >
+                    {managingVariantImages.images.map((img) => {
+                      const isPrimary = img.is_primary === 1;
+
+                      return (
+                        <div
+                          key={img.image_id}
+                          style={{
+                            border: isPrimary ? '2px solid var(--primary)' : '1px solid #E5E7EB',
+                            borderRadius: 8,
+                            padding: 8,
+                            backgroundColor: '#FFFFFF',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            position: 'relative',
+                          }}
+                        >
+                          {/* Image preview box */}
+                          <div
+                            style={{
+                              width: '100%',
+                              height: 100,
+                              borderRadius: 4,
+                              overflow: 'hidden',
+                              backgroundColor: '#FAFAFA',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <img
+                              src={img.image_url}
+                              alt=""
+                              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              onError={(e) => {
+                                e.target.src = 'https://placehold.co/120x120?text=Loi+Anh';
+                              }}
+                            />
+                          </div>
+
+                          {/* Primary status badge */}
+                          {isPrimary ? (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: 'var(--primary)',
+                                backgroundColor: 'var(--primary-light)',
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                marginBottom: 6,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              ⭐ Ảnh chính
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetPrimaryVariantImage(img.image_id)}
+                              style={{
+                                fontSize: 11,
+                                color: '#2563EB',
+                                backgroundColor: '#EFF6FF',
+                                border: '1px solid #BFDBFE',
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                marginBottom: 6,
+                              }}
+                            >
+                              Đặt làm ảnh chính
+                            </button>
+                          )}
+
+                          {/* Delete image button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVariantImage(img.image_id)}
+                            style={{
+                              fontSize: 11,
+                              color: '#EF4444',
+                              backgroundColor: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                          >
+                            <Icons.Trash2 size={11} />
+                            <span>Xóa</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setManagingVariantImages(null)}
+                  style={{
+                    backgroundColor: '#1E293B',
+                    color: '#FFF',
+                    padding: '8px 20px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 13,
+                  }}
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -217,20 +217,56 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
             className="detail-main-img"
           />
 
-          {/* Thumbnails */}
-          {product.images && product.images.length > 0 && (
-            <div className="detail-thumbs-row">
-              {product.images.map((img) => (
-                <div
-                  key={img.image_id}
-                  className={`detail-thumb-item ${selectedImage === img.image_url ? 'active' : ''}`}
-                  onClick={() => setSelectedImage(img.image_url)}
-                >
-                  <img src={img.image_url} alt={img.alt_text || 'gear thumb'} />
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Thumbnails Row (Combining Variant Images & Product Images) */}
+          {(() => {
+            const allGalleryImages = [];
+            const seenUrls = new Set();
+
+            if (selectedVariant?.images && selectedVariant.images.length > 0) {
+              selectedVariant.images.forEach((img) => {
+                const url = typeof img === 'string' ? img : img.image_url;
+                if (url && !seenUrls.has(url)) {
+                  seenUrls.add(url);
+                  allGalleryImages.push({
+                    image_url: url,
+                    alt_text: selectedVariant.variant_name,
+                    is_variant_img: true,
+                  });
+                }
+              });
+            }
+
+            if (product.images && product.images.length > 0) {
+              product.images.forEach((img) => {
+                const url = typeof img === 'string' ? img : img.image_url;
+                if (url && !seenUrls.has(url)) {
+                  seenUrls.add(url);
+                  allGalleryImages.push({
+                    image_url: url,
+                    alt_text: img.alt_text || product.product_name,
+                  });
+                }
+              });
+            }
+
+            if (allGalleryImages.length === 0 && product.thumbnail_url) {
+              allGalleryImages.push({ image_url: product.thumbnail_url, alt_text: product.product_name });
+            }
+
+            return allGalleryImages.length > 1 ? (
+              <div className="detail-thumbs-row">
+                {allGalleryImages.map((img, i) => (
+                  <div
+                    key={i}
+                    className={`detail-thumb-item ${selectedImage === img.image_url ? 'active' : ''}`}
+                    onClick={() => setSelectedImage(img.image_url)}
+                  >
+                    <img src={img.image_url} alt={img.alt_text || 'gear thumb'} />
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Right Product Information */}
@@ -309,7 +345,13 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
                   <button
                     key={v.variant_id}
                     className={`variant-pill ${selectedVariant?.variant_id === v.variant_id ? 'active' : ''}`}
-                    onClick={() => setSelectedVariant(v)}
+                    onClick={() => {
+                      setSelectedVariant(v);
+                      if (v.images && v.images.length > 0) {
+                        const primaryVarImg = v.images.find((img) => img.is_primary === 1)?.image_url || v.images[0]?.image_url;
+                        if (primaryVarImg) setSelectedImage(primaryVarImg);
+                      }
+                    }}
                   >
                     {v.variant_name}
                   </button>

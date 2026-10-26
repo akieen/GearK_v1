@@ -13,6 +13,8 @@ const couponRoutes = require('./couponRoutes');
 const addressRoutes = require('./addressRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const uploadRoutes = require('./uploadRoutes');
+const inventoryRoutes = require('./inventoryRoutes');
 
 // API Health Check & Database connection status
 router.get('/health', async (req, res) => {
@@ -48,5 +50,7 @@ router.use('/coupons', couponRoutes);
 router.use('/addresses', addressRoutes);
 router.use('/wishlist', wishlistRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/upload', uploadRoutes);
+router.use('/inventory', inventoryRoutes);
 
 module.exports = router;

@@ -1,5 +1,5 @@
 const { pool } = require('../config/db');
-const { slugify, successResponse, errorResponse } = require('../utils/helpers');
+const { slugify, generateSku, successResponse, errorResponse } = require('../utils/helpers');
 
 // [GET] /api/products
 async function getProducts(req, res, next) {
@@ -280,9 +280,11 @@ async function createProduct(req, res, next) {
     // Insert variants
     if (Array.isArray(variants) && variants.length > 0) {
       for (const v of variants) {
-        const sku = v.sku || `${finalSlug}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
+        const sku = (v.sku && typeof v.sku === 'string' && v.sku.trim())
+          ? v.sku.trim().toUpperCase()
+          : generateSku(product_name, v.variant_name);
         const specs = v.specifications ? JSON.stringify(v.specifications) : null;
-        await connection.query(
+        const [varRes] = await connection.query(
           `INSERT INTO product_variants 
             (product_id, sku, variant_name, specifications, price, sale_price, stock, warranty_months)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -297,16 +299,39 @@ async function createProduct(req, res, next) {
             v.warranty_months || 12
           ]
         );
+        const variantId = varRes.insertId;
+
+        // Insert variant images
+        if (Array.isArray(v.images) && v.images.length > 0) {
+          for (let i = 0; i < v.images.length; i++) {
+            const img = v.images[i];
+            const imgUrl = typeof img === 'string' ? img : img.image_url;
+            if (!imgUrl) continue;
+            const isPrimary = (typeof img === 'object' && img.is_primary) ? 1 : (i === 0 ? 1 : 0);
+            await connection.query(
+              `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
+               VALUES (?, ?, ?, ?)`,
+              [variantId, imgUrl, isPrimary, i]
+            );
+          }
+        }
       }
     } else {
       // Create a default variant if none provided
-      const defaultSku = `${finalSlug}-DEFAULT`.toUpperCase();
-      await connection.query(
+      const defaultSku = generateSku(product_name, 'Tiêu chuẩn');
+      const [defRes] = await connection.query(
         `INSERT INTO product_variants 
           (product_id, sku, variant_name, price, stock, warranty_months)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [productId, defaultSku, 'Tiêu chuẩn', 0, 0, 12]
       );
+      if (thumbnail_url) {
+        await connection.query(
+          `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
+           VALUES (?, ?, 1, 0)`,
+          [defRes.insertId, thumbnail_url]
+        );
+      }
     }
 
     // Insert product images
@@ -438,23 +463,84 @@ function normalizeSpecifications(specifications) {
 async function addVariant(req, res, next) {
   try {
     const { id } = req.params;
-    const { sku, variant_name, specifications, price, sale_price, stock = 0, warranty_months = 12 } = req.body;
+    let { sku, variant_name, specifications, price, sale_price, stock = 0, warranty_months = 12, images = [] } = req.body;
 
     if (!variant_name || price === undefined) {
       return errorResponse(res, 'Vui lòng cung cấp tên phiên bản và giá bán', 400);
     }
 
-    const autoSku = sku || `SKU-${id}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
+    // Parse images if passed as string JSON
+    if (typeof images === 'string') {
+      try {
+        images = JSON.parse(images);
+      } catch (e) {
+        images = [images];
+      }
+    }
+
+    // If files uploaded via multer
+    const uploadedFiles = req.files || (req.file ? [req.file] : []);
+    const fileUrls = uploadedFiles.map((f) => `/uploads/${f.filename}`);
+    const allImages = [...(Array.isArray(images) ? images : (images ? [images] : [])), ...fileUrls];
+
+    let finalSku = (sku && typeof sku === 'string' && sku.trim()) ? sku.trim().toUpperCase() : null;
+    if (!finalSku) {
+      const [prodRows] = await pool.query('SELECT product_name FROM products WHERE product_id = ?', [id]);
+      const prodName = prodRows.length > 0 ? prodRows[0].product_name : '';
+      finalSku = generateSku(prodName, variant_name);
+    }
+
     const specs = normalizeSpecifications(specifications);
 
     const [result] = await pool.query(
       `INSERT INTO product_variants (product_id, sku, variant_name, specifications, price, sale_price, stock, warranty_months)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, autoSku, variant_name, specs, price, sale_price || null, stock, warranty_months]
+      [id, finalSku, variant_name, specs, price, sale_price || null, stock, warranty_months]
     );
 
-    return successResponse(res, { variant_id: result.insertId }, 'Thêm phiên bản sản phẩm thành công', 201);
+    const variantId = result.insertId;
+
+    // Insert variant images
+    if (allImages.length > 0) {
+      for (let i = 0; i < allImages.length; i++) {
+        const img = allImages[i];
+        const imgUrl = typeof img === 'string' ? img : img.image_url;
+        if (!imgUrl) continue;
+        const isPrimary = (typeof img === 'object' && img.is_primary) ? 1 : (i === 0 ? 1 : 0);
+        await pool.query(
+          `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
+           VALUES (?, ?, ?, ?)`,
+          [variantId, imgUrl, isPrimary, i]
+        );
+      }
+    }
+
+    // Fetch created variant with images
+    const [createdImages] = await pool.query(
+      'SELECT image_id, variant_id, image_url, is_primary, sort_order FROM variant_images WHERE variant_id = ? ORDER BY sort_order ASC',
+      [variantId]
+    );
+
+    return successResponse(
+      res,
+      {
+        variant_id: variantId,
+        product_id: parseInt(id, 10),
+        sku: finalSku,
+        variant_name,
+        price,
+        sale_price,
+        stock,
+        warranty_months,
+        images: createdImages,
+      },
+      'Thêm phiên bản sản phẩm thành công',
+      201
+    );
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return errorResponse(res, `Mã SKU đã tồn tại trên hệ thống. Vui lòng thử mã khác.`, 400);
+    }
     next(error);
   }
 }
@@ -498,6 +584,9 @@ async function updateVariant(req, res, next) {
 
     return successResponse(res, null, 'Cập nhật phiên bản thành công');
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return errorResponse(res, `Mã SKU đã tồn tại trên hệ thống.`, 400);
+    }
     next(error);
   }
 }
@@ -516,6 +605,278 @@ async function deleteVariant(req, res, next) {
   }
 }
 
+// ============================================
+// VARIANT IMAGES MANAGEMENT
+// ============================================
+
+// [GET] /api/products/variants/:variantId/images
+async function getVariantImages(req, res, next) {
+  try {
+    const { variantId } = req.params;
+    const [images] = await pool.query(
+      `SELECT image_id, variant_id, image_url, is_primary, sort_order, created_at
+       FROM variant_images
+       WHERE variant_id = ?
+       ORDER BY is_primary DESC, sort_order ASC, created_at ASC`,
+      [variantId]
+    );
+    return successResponse(res, images, 'Danh sách ảnh của biến thể');
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [POST] /api/products/variants/:variantId/images (Admin only, supports file upload or URL)
+async function addVariantImage(req, res, next) {
+  try {
+    const { variantId } = req.params;
+    let imageUrl = req.body?.image_url;
+    if (req.file) {
+      imageUrl = `/uploads/${req.file.filename}`;
+    } else if (req.files && req.files.length > 0) {
+      imageUrl = `/uploads/${req.files[0].filename}`;
+    }
+
+    if (!imageUrl) {
+      return errorResponse(res, 'Vui lòng cung cấp tệp ảnh hoặc URL ảnh', 400);
+    }
+
+    const [variantRows] = await pool.query('SELECT * FROM product_variants WHERE variant_id = ?', [variantId]);
+    if (variantRows.length === 0) {
+      return errorResponse(res, 'Biến thể không tồn tại', 404);
+    }
+
+    const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM variant_images WHERE variant_id = ?', [variantId]);
+    const isFirst = countRows[0].total === 0;
+    const requestedPrimary = req.body?.is_primary === 'true' || req.body?.is_primary === true || req.body?.is_primary === 1 || isFirst;
+
+    if (requestedPrimary) {
+      await pool.query('UPDATE variant_images SET is_primary = 0 WHERE variant_id = ?', [variantId]);
+    }
+
+    const [insertResult] = await pool.query(
+      `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
+       VALUES (?, ?, ?, ?)`,
+      [variantId, imageUrl, requestedPrimary ? 1 : 0, countRows[0].total]
+    );
+
+    return successResponse(
+      res,
+      {
+        image_id: insertResult.insertId,
+        variant_id: parseInt(variantId, 10),
+        image_url: imageUrl,
+        is_primary: requestedPrimary ? 1 : 0,
+        sort_order: countRows[0].total,
+      },
+      'Thêm ảnh cho biến thể thành công',
+      201
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [DELETE] /api/products/variants/images/:imageId (Admin only)
+async function deleteVariantImage(req, res, next) {
+  try {
+    const { imageId } = req.params;
+    const [existing] = await pool.query('SELECT * FROM variant_images WHERE image_id = ?', [imageId]);
+    if (existing.length === 0) {
+      return errorResponse(res, 'Ảnh biến thể không tồn tại', 404);
+    }
+
+    const variantId = existing[0].variant_id;
+    const wasPrimary = existing[0].is_primary === 1;
+
+    await pool.query('DELETE FROM variant_images WHERE image_id = ?', [imageId]);
+
+    if (wasPrimary) {
+      const [remaining] = await pool.query(
+        'SELECT image_id FROM variant_images WHERE variant_id = ? ORDER BY sort_order ASC, image_id ASC LIMIT 1',
+        [variantId]
+      );
+      if (remaining.length > 0) {
+        await pool.query('UPDATE variant_images SET is_primary = 1 WHERE image_id = ?', [remaining[0].image_id]);
+      }
+    }
+
+    return successResponse(res, null, 'Đã xóa ảnh biến thể');
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [PUT] /api/products/variants/images/:imageId/primary (Admin only)
+async function setPrimaryVariantImage(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { imageId } = req.params;
+
+    const [existing] = await connection.query('SELECT * FROM variant_images WHERE image_id = ?', [imageId]);
+    if (existing.length === 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Ảnh biến thể không tồn tại', 404);
+    }
+
+    const variantId = existing[0].variant_id;
+
+    // Reset all variant images to non-primary
+    await connection.query('UPDATE variant_images SET is_primary = 0 WHERE variant_id = ?', [variantId]);
+    // Set this image as primary
+    await connection.query('UPDATE variant_images SET is_primary = 1 WHERE image_id = ?', [imageId]);
+
+    await connection.commit();
+    return successResponse(res, null, 'Đã đặt ảnh làm ảnh chính cho biến thể');
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+}
+
+// ============================================
+// PRODUCT IMAGES MANAGEMENT
+// ============================================
+
+// [GET] /api/products/:id/images
+async function getProductImages(req, res, next) {
+  try {
+    const { id } = req.params;
+    const [images] = await pool.query(
+      `SELECT image_id, product_id, image_url, alt_text, is_primary, sort_order, created_at
+       FROM product_images
+       WHERE product_id = ?
+       ORDER BY is_primary DESC, sort_order ASC, created_at ASC`,
+      [id]
+    );
+    return successResponse(res, images, 'Danh sách ảnh sản phẩm');
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [POST] /api/products/:id/images (Admin only, file upload or URL)
+async function addProductImage(req, res, next) {
+  try {
+    const { id } = req.params;
+    let imageUrl = req.body?.image_url;
+    if (req.file) {
+      imageUrl = `/uploads/${req.file.filename}`;
+    } else if (req.files && req.files.length > 0) {
+      imageUrl = `/uploads/${req.files[0].filename}`;
+    }
+
+    if (!imageUrl) {
+      return errorResponse(res, 'Vui lòng cung cấp tệp ảnh hoặc URL ảnh', 400);
+    }
+
+    const [productRows] = await pool.query('SELECT product_name, thumbnail_url FROM products WHERE product_id = ?', [id]);
+    if (productRows.length === 0) {
+      return errorResponse(res, 'Sản phẩm không tồn tại', 404);
+    }
+
+    const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM product_images WHERE product_id = ?', [id]);
+    const isFirst = countRows[0].total === 0;
+    const requestedPrimary = req.body?.is_primary === 'true' || req.body?.is_primary === true || req.body?.is_primary === 1 || isFirst;
+
+    if (requestedPrimary) {
+      await pool.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [id]);
+      await pool.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [imageUrl, id]);
+    }
+
+    const altText = req.body?.alt_text || productRows[0].product_name;
+
+    const [insertResult] = await pool.query(
+      `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, imageUrl, altText, requestedPrimary ? 1 : 0, countRows[0].total]
+    );
+
+    return successResponse(
+      res,
+      {
+        image_id: insertResult.insertId,
+        product_id: parseInt(id, 10),
+        image_url: imageUrl,
+        alt_text: altText,
+        is_primary: requestedPrimary ? 1 : 0,
+        sort_order: countRows[0].total,
+      },
+      'Thêm ảnh sản phẩm thành công',
+      201
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [DELETE] /api/products/images/:imageId (Admin only)
+async function deleteProductImage(req, res, next) {
+  try {
+    const { imageId } = req.params;
+    const [existing] = await pool.query('SELECT * FROM product_images WHERE image_id = ?', [imageId]);
+    if (existing.length === 0) {
+      return errorResponse(res, 'Ảnh sản phẩm không tồn tại', 404);
+    }
+
+    const productId = existing[0].product_id;
+    const wasPrimary = existing[0].is_primary === 1;
+
+    await pool.query('DELETE FROM product_images WHERE image_id = ?', [imageId]);
+
+    if (wasPrimary) {
+      const [remaining] = await pool.query(
+        'SELECT image_id, image_url FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, image_id ASC LIMIT 1',
+        [productId]
+      );
+      if (remaining.length > 0) {
+        await pool.query('UPDATE product_images SET is_primary = 1 WHERE image_id = ?', [remaining[0].image_id]);
+        await pool.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [remaining[0].image_url, productId]);
+      }
+    }
+
+    return successResponse(res, null, 'Đã xóa ảnh sản phẩm');
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [PUT] /api/products/images/:imageId/primary (Admin only)
+async function setPrimaryProductImage(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { imageId } = req.params;
+
+    const [existing] = await connection.query('SELECT * FROM product_images WHERE image_id = ?', [imageId]);
+    if (existing.length === 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Ảnh không tồn tại', 404);
+    }
+
+    const productId = existing[0].product_id;
+    const imageUrl = existing[0].image_url;
+
+    // Reset all product images to non-primary
+    await connection.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [productId]);
+    // Set this image as primary
+    await connection.query('UPDATE product_images SET is_primary = 1 WHERE image_id = ?', [imageId]);
+    // Update thumbnail_url in products
+    await connection.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [imageUrl, productId]);
+
+    await connection.commit();
+    return successResponse(res, null, 'Đã đặt làm ảnh chính sản phẩm');
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   getProducts,
   getProductBySlug,
@@ -525,5 +886,13 @@ module.exports = {
   deleteProduct,
   addVariant,
   updateVariant,
-  deleteVariant
+  deleteVariant,
+  getVariantImages,
+  addVariantImage,
+  deleteVariantImage,
+  setPrimaryVariantImage,
+  getProductImages,
+  addProductImage,
+  deleteProductImage,
+  setPrimaryProductImage,
 };

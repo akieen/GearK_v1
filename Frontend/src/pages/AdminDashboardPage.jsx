@@ -5,7 +5,7 @@ import { dashboardApi, couponApi } from '../api/extraApi';
 import { orderApi } from '../api/cartApi';
 import { productApi } from '../api/productApi';
 import { categoryApi, brandApi } from '../api/categoryApi';
-import { formatPrice, formatDate, getOrderStatusText } from '../utils/formatters';
+import { formatPrice, formatDate, getOrderStatusText, generateSku } from '../utils/formatters';
 import Icons from '../components/common/Icons';
 import StatsTab from './pageDashboard/StatsTab';
 import OrdersTab from './pageDashboard/OrdersTab';
@@ -14,6 +14,7 @@ import CouponsTab from './pageDashboard/CouponsTab';
 import CategoriesTab from './pageDashboard/CategoriesTab';
 import BrandsTab from './pageDashboard/BrandsTab';
 import VariantsTab from './pageDashboard/VariantsTab';
+import InventoryTab from './pageDashboard/InventoryTab';
 import AddProductModal from './pageDashboard/AddProductModal';
 import EditProductModal from './pageDashboard/EditProductModal';
 
@@ -56,11 +57,13 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   const [newProdBrandId, setNewProdBrandId] = useState('');
   const [newProdDesc, setNewProdDesc] = useState('');
   const [newProdThumb, setNewProdThumb] = useState('');
+  const [newProdImages, setNewProdImages] = useState([]);
   const [newVariantSku, setNewVariantSku] = useState('');
   const [newVariantName, setNewVariantName] = useState('');
   const [newVariantPrice, setNewVariantPrice] = useState('');
   const [newVariantSalePrice, setNewVariantSalePrice] = useState('');
   const [newVariantStock, setNewVariantStock] = useState('20');
+  const [newVariantImages, setNewVariantImages] = useState([]);
   const [submittingProduct, setSubmittingProduct] = useState(false);
 
   const fetchStats = useCallback(async () => {
@@ -200,15 +203,17 @@ export const AdminDashboardPage = ({ onNavigate }) => {
         brand_id: parseInt(newProdBrandId),
         product_name: newProdName.trim(),
         description: newProdDesc.trim(),
-        thumbnail_url: newProdThumb.trim() || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80',
+        thumbnail_url: newProdThumb.trim() || (newProdImages.length > 0 ? newProdImages[0] : (newVariantImages.length > 0 ? newVariantImages[0] : 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80')),
+        images: newProdImages,
         variants: [
           {
-            sku: newVariantSku.trim() || `GEARK-${Date.now().toString().slice(-4)}`,
+            sku: newVariantSku.trim() || generateSku(newProdName, newVariantName),
             variant_name: newVariantName.trim() || 'Bản Tiêu Chuẩn',
             price: parseFloat(newVariantPrice),
             sale_price: newVariantSalePrice ? parseFloat(newVariantSalePrice) : parseFloat(newVariantPrice),
             stock: parseInt(newVariantStock) || 20,
             specifications: { 'Bảo hành': '24 tháng', 'Tình trạng': 'Mới 100% fullbox' },
+            images: newVariantImages,
           },
         ],
       };
@@ -221,10 +226,12 @@ export const AdminDashboardPage = ({ onNavigate }) => {
         setNewProdName('');
         setNewProdDesc('');
         setNewProdThumb('');
+        setNewProdImages([]);
         setNewVariantSku('');
         setNewVariantName('');
         setNewVariantPrice('');
         setNewVariantSalePrice('');
+        setNewVariantImages([]);
         fetchProducts();
       }
     } catch (err) {
@@ -451,6 +458,14 @@ export const AdminDashboardPage = ({ onNavigate }) => {
           </div>
 
           <button
+            className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
+            onClick={() => setActiveTab('inventory')}
+          >
+            <Icons.Package size={18} />
+            <span>Kho hàng & Xuất Nhập</span>
+          </button>
+
+          <button
             className={`admin-nav-item ${activeTab === 'coupons' ? 'active' : ''}`}
             onClick={() => setActiveTab('coupons')}
           >
@@ -554,6 +569,11 @@ export const AdminDashboardPage = ({ onNavigate }) => {
             />
           )}
 
+          {/* TAB: INVENTORY / KHO HÀNG */}
+          {activeTab === 'inventory' && (
+            <InventoryTab Icons={Icons} />
+          )}
+
 </main>
       </div>
       {/* Modal Add Product */}
@@ -574,6 +594,8 @@ export const AdminDashboardPage = ({ onNavigate }) => {
         setNewProdDesc={setNewProdDesc}
         newProdThumb={newProdThumb}
         setNewProdThumb={setNewProdThumb}
+        newProdImages={newProdImages}
+        setNewProdImages={setNewProdImages}
         newVariantName={newVariantName}
         setNewVariantName={setNewVariantName}
         newVariantSku={newVariantSku}
@@ -584,6 +606,8 @@ export const AdminDashboardPage = ({ onNavigate }) => {
         setNewVariantSalePrice={setNewVariantSalePrice}
         newVariantStock={newVariantStock}
         setNewVariantStock={setNewVariantStock}
+        newVariantImages={newVariantImages}
+        setNewVariantImages={setNewVariantImages}
         Icons={Icons}
       />
 

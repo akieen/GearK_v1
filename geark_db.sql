@@ -124,6 +124,7 @@ CREATE TABLE `inventory_transactions` (
   `transaction_type` enum('purchase','sale','return','adjustment','damage') NOT NULL,
   `quantity_delta` int NOT NULL,
   `stock_after` int NOT NULL,
+  `note` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ;
 

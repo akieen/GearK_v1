@@ -4,8 +4,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('geark_token');
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };

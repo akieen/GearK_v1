@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ImageUploadField from '../../components/common/ImageUploadField';
 
 export default function EditProductModal({
   editingProduct,
@@ -159,42 +160,14 @@ export default function EditProductModal({
               </select>
             </div>
 
-            {/* Link ảnh đại diện & Preview */}
-            <div className="form-group">
-              <label className="form-label">Ảnh đại diện (Thumbnail URL)</label>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <input
-                  type="url"
-                  className="form-input"
-                  style={{ flex: 1 }}
-                  placeholder="https://..."
-                  value={thumbnailUrl}
-                  onChange={(e) => setThumbnailUrl(e.target.value)}
-                />
-                {thumbnailUrl && (
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 6,
-                      border: '1px solid var(--border-light)',
-                      overflow: 'hidden',
-                      backgroundColor: '#F9FAFB',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <img
-                      src={thumbnailUrl}
-                      alt="Thumbnail preview"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+            {/* Link ảnh đại diện & Multer Upload */}
+            <ImageUploadField
+              label="Ảnh đại diện (Thumbnail - Multer File Upload)"
+              value={thumbnailUrl}
+              onChange={setThumbnailUrl}
+              multiple={false}
+              hint="Chọn ảnh từ máy tính (Multer) hoặc nhập URL"
+            />
 
             {/* Mô tả sản phẩm */}
             <div className="form-group">
