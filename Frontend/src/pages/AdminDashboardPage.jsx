@@ -452,6 +452,21 @@ export const AdminDashboardPage = ({ onNavigate }) => {
         {/* COMPONENTS GROUP: SẢN PHẨM & KHO HÀNG */}
         <div className="freedash-nav-group-title">SẢN PHẨM & KHO HÀNG</div>
 
+        <button
+          className={`freedash-nav-btn ${activeTab === 'inventory' ? 'active' : ''}`}
+          onClick={() => setActiveTab('inventory')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span>Quản lý Tồn kho</span>
+          </div>
+        </button>
+
         <div>
           <button
             className={`freedash-nav-btn ${['products', 'variants'].includes(activeTab) ? 'active' : ''}`}
@@ -492,21 +507,6 @@ export const AdminDashboardPage = ({ onNavigate }) => {
             </div>
           )}
         </div>
-
-        <button
-          className={`freedash-nav-btn ${activeTab === 'inventory' ? 'active' : ''}`}
-          onClick={() => setActiveTab('inventory')}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-            <span>Quản lý Tồn kho</span>
-          </div>
-        </button>
 
         <button
           className={`freedash-nav-btn ${activeTab === 'categories' ? 'active' : ''}`}
