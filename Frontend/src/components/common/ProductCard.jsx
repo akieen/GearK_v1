@@ -74,8 +74,7 @@ export const ProductCard = ({ product, onNavigate }) => {
             <Icons.Star size={13} filled={true} />
           </div>
           <span>{parseFloat(product.avg_rating || 5.0).toFixed(1)}</span>
-          <span>• Đã bán {product.total_sold || 25}</span>
-        </div>
+       </div>
 
         <div className="product-card-actions">
           <button

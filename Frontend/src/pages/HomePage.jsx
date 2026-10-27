@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HeroBanner } from '../components/home/HeroBanner';
 import { TrustFeatures, FlashSaleSection } from '../components/home/HomeSections';
 import { BrandShowcase } from '../components/home/BrandShowcase';
@@ -12,6 +12,10 @@ export const HomePage = ({
   onNavigate,
 }) => {
   const [selectedCatTab, setSelectedCatTab] = useState('all');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const filteredProducts =
     selectedCatTab === 'all'

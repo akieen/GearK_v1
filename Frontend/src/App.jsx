@@ -23,12 +23,37 @@ import { AdminDashboardPage } from './pages/AdminDashboardPage';
 // APIs
 import { productApi } from './api/productApi';
 import { categoryApi, brandApi } from './api/categoryApi';
-function AppContent() {
-  const [currentRoute, setCurrentRoute] = useState(() => {
-    const hash = window.location.hash.replace('#', '');
-    return hash || 'home';
+// Helper to parse route path and query parameters from hash or path string
+const parseRoute = (path) => {
+  const cleanPath = (path || '').replace(/^#\/?/, '').trim();
+  if (!cleanPath) {
+    return { route: 'home', params: {} };
+  }
+
+  const [routePath, queryString] = cleanPath.split('?');
+  const queryParams = new URLSearchParams(queryString || '');
+  const params = {};
+  queryParams.forEach((val, key) => {
+    params[key] = val;
   });
-  const [routeParams, setRouteParams] = useState({});
+
+  if (routePath.startsWith('product/')) {
+    const slug = routePath.replace(/^product\//, '');
+    return { route: 'product-detail', params: { slug, ...params } };
+  } else if (routePath.startsWith('order-success/')) {
+    const code = routePath.replace(/^order-success\//, '');
+    return { route: 'order-success', params: { orderCode: code, ...params } };
+  } else if (routePath.startsWith('admin')) {
+    return { route: 'admin', params };
+  }
+
+  return { route: routePath || 'home', params };
+};
+
+function AppContent() {
+  const initialParsed = parseRoute(window.location.hash);
+  const [currentRoute, setCurrentRoute] = useState(initialParsed.route);
+  const [routeParams, setRouteParams] = useState(initialParsed.params);
   const [lastOrderData, setLastOrderData] = useState(null);
 
   // Global store data
@@ -36,11 +61,34 @@ function AppContent() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
 
+  // Đảm bảo cuộn về đầu trang khi tải lại trang và trước khi unload
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+
+    const handleBeforeUnload = () => {
+      window.scrollTo(0, 0);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // Cuộn về đầu trang mỗi khi chuyển route
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentRoute]);
+
   // Listen for browser hash changes
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '') || 'home';
-      navigate(hash, false);
+      const { route, params } = parseRoute(window.location.hash);
+      setCurrentRoute(route);
+      setRouteParams(params);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -75,27 +123,9 @@ function AppContent() {
   const navigate = (path, updateHash = true) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Parse path: e.g. "product/razer-viper-v3-pro" or "products?category=chuot-gaming"
-    const [routePath, queryString] = path.split('?');
-    const queryParams = new URLSearchParams(queryString || '');
-
-    const params = {};
-    queryParams.forEach((val, key) => {
-      params[key] = val;
-    });
-
-    if (routePath.startsWith('product/')) {
-      const slug = routePath.replace('product/', '');
-      setCurrentRoute('product-detail');
-      setRouteParams({ slug, ...params });
-    } else if (routePath.startsWith('order-success/')) {
-      const code = routePath.replace('order-success/', '');
-      setCurrentRoute('order-success');
-      setRouteParams({ orderCode: code, ...params });
-    } else {
-      setCurrentRoute(routePath || 'home');
-      setRouteParams(params);
-    }
+    const { route, params } = parseRoute(path);
+    setCurrentRoute(route);
+    setRouteParams(params);
 
     if (updateHash) {
       window.location.hash = path;
