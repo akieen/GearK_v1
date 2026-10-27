@@ -1,6 +1,18 @@
 import React from 'react';
 
 export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOrders, handleUpdateStatus, formatPrice, getOrderStatusText }) {
+  const displayedOrders = orderFilter
+    ? orders.filter((ord) => ord.order_status === orderFilter)
+    : orders;
+
+  const handleFilterChange = (e) => {
+    const val = e.target.value;
+    setOrderFilter(val);
+    if (typeof fetchOrders === 'function') {
+      fetchOrders(val);
+    }
+  };
+
   return (
     <div>
       <div
@@ -20,7 +32,17 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
           <select
             className="sort-select"
             value={orderFilter}
-            onChange={(e) => setOrderFilter(e.target.value)}
+            onChange={handleFilterChange}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #D1D5DB',
+              fontSize: 13,
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer',
+              backgroundColor: '#F9FAFB',
+            }}
           >
             <option value="">Tất cả trạng thái</option>
             <option value="pending">Chờ xác nhận</option>
@@ -31,13 +53,16 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
             <option value="cancelled">Đã hủy</option>
             <option value="refunded">Đã hoàn tiền</option>
           </select>
+          <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>
+            ({displayedOrders.length} đơn hàng)
+          </span>
         </div>
         <button
-          onClick={fetchOrders}
-          style={{ fontSize: 12.5, color: 'var(--primary)', fontWeight: 700 }}
+          onClick={() => fetchOrders && fetchOrders(orderFilter)}
+          style={{ fontSize: 12.5, color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none' }}
         >
           Làm mới danh sách
-        </button>
+        </button> 
       </div>
 
       <div className="data-table-card">
@@ -53,14 +78,14 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
             </tr>
           </thead>
           <tbody>
-            {orders.length === 0 ? (
+            {displayedOrders.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
-                  Không có đơn hàng nào
+                  {orderFilter ? `Không có đơn hàng nào ở trạng thái này` : 'Không có đơn hàng nào'}
                 </td>
               </tr>
             ) : (
-              orders.map((ord) => {
+              displayedOrders.map((ord) => {
                 const statusInfo = getOrderStatusText(ord.order_status);
                 return (
                   <tr key={ord.order_id}>

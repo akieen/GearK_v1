@@ -1,9 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Chip from '@mui/material/Chip';
+import InventoryIcon from '@mui/icons-material/Inventory';
+
 import { orderApi } from '../api/cartApi';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatPrice, formatDate, getOrderStatusText } from '../utils/formatters';
-import Icons from '../components/common/Icons';
+import { StatusBadge } from '../components/ui/AppBadge';
+import { AppButton } from '../components/ui/AppButton';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 export const MyOrdersPage = ({ onNavigate }) => {
   const { user, openAuthModal } = useAuth();
@@ -53,223 +66,184 @@ export const MyOrdersPage = ({ onNavigate }) => {
 
   if (!user) {
     return (
-      <div className="container" style={{ padding: '60px 0', textAlign: 'center' }}>
-        <p style={{ fontWeight: 700, fontSize: 16 }}>Vui lòng đăng nhập để xem lịch sử đơn hàng.</p>
-        <button
-          onClick={() => openAuthModal('login')}
-          style={{
-            backgroundColor: 'var(--primary)',
-            color: '#FFFFFF',
-            padding: '10px 20px',
-            borderRadius: 6,
-            fontWeight: 700,
-            marginTop: 14,
-            cursor: 'pointer',
-          }}
-        >
-          Đăng nhập ngay
-        </button>
-      </div>
+      <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
+        <EmptyState
+          icon={<InventoryIcon />}
+          title="Vui lòng đăng nhập"
+          description="Đăng nhập để theo dõi lịch sử đơn hàng và tiến độ vận chuyển của bạn."
+          actionText="Đăng nhập ngay"
+          onAction={() => openAuthModal('login')}
+        />
+      </Container>
     );
   }
 
   return (
-    <div className="container" style={{ padding: '24px 0 48px 0' }}>
-      <div style={{ paddingBottom: 16, borderBottom: '2px solid var(--border-light)', marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>
-          ĐƠN HÀNG CỦA TÔI ({orders.length})
-        </h2>
-        <p style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-          Theo dõi tiến độ vận chuyển và lịch sử mua sắm của bạn tại GearK.
-        </p>
-      </div>
+    <Box sx={{ py: 4, pb: 8 }}>
+      <Container maxWidth="lg">
+        {/* Header */}
+        <Box sx={{ mb: 4, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase', color: 'text.primary' }}>
+            Đơn hàng của tôi ({orders.length})
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Theo dõi tiến độ vận chuyển và lịch sử mua sắm thiết bị tại GearK.
+          </Typography>
+        </Box>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#6B7280' }}>
-          <p style={{ fontWeight: 700, fontSize: 15 }}>Đang tải lịch sử đơn sắm...</p>
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="empty-state">
-          <Icons.Package size={56} className="empty-state-icon" />
-          <h3 className="empty-state-title">Bạn chưa có đơn hàng nào</h3>
-          <p className="empty-state-desc">Hãy dạo quanh cửa hàng và chọn cho mình bộ Gaming Gear ưng ý nhất!</p>
-          <button
-            onClick={() => onNavigate('products')}
-            style={{
-              backgroundColor: 'var(--primary)',
-              color: '#FFFFFF',
-              padding: '10px 24px',
-              borderRadius: 6,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Khám phá Gaming Gear ngay
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {orders.map((order) => {
-            const statusInfo = getOrderStatusText(order.order_status);
-            return (
-              <div
-                key={order.order_id}
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: 12,
-                  border: '1px solid var(--border-light)',
-                  padding: 24,
-                  boxShadow: 'var(--shadow-xs)',
-                }}
-              >
-                {/* Order Top Bar */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderBottom: '1px solid var(--border-light)',
-                    paddingBottom: 14,
-                    marginBottom: 16,
-                    flexWrap: 'wrap',
-                    gap: 10,
+        {loading ? (
+          <LoadingSpinner minHeight={320} message="Đang tải lịch sử đơn hàng..." />
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon={<InventoryIcon />}
+            title="Bạn chưa có đơn hàng nào"
+            description="Hãy dạo quanh cửa hàng và chọn cho mình bộ Gaming Gear ưng ý nhất!"
+            actionText="Khám phá Gaming Gear ngay"
+            onAction={() => onNavigate('products')}
+          />
+        ) : (
+          <Stack spacing={3}>
+            {orders.map((order) => {
+              const statusInfo = getOrderStatusText(order.order_status);
+              return (
+                <Paper
+                  key={order.order_id}
+                  elevation={1}
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    border: '1px solid #E5E7EB',
+                    backgroundColor: '#FFFFFF',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>
-                      Mã đơn: <span style={{ color: 'var(--primary)' }}>{order.order_code}</span>
-                    </span>
-                    <span style={{ fontSize: 12, color: '#9CA3AF' }}>•</span>
-                    <span style={{ fontSize: 12.5, color: '#6B7280' }}>
-                      Ngày đặt: {formatDate(order.created_at)}
-                    </span>
-                  </div>
-
-                  <span
-                    className="status-pill"
-                    style={{ backgroundColor: statusInfo.bg, color: statusInfo.color }}
+                  {/* Order Top Bar */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid #F1F5F9',
+                      pb: 2,
+                      mb: 2.5,
+                      flexWrap: 'wrap',
+                      gap: 1.5,
+                    }}
                   >
-                    ● {statusInfo.label}
-                  </span>
-                </div>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                        Mã đơn: <span style={{ color: '#E30019' }}>#{order.order_code}</span>
+                      </Typography>
+                      <span>•</span>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        Ngày đặt: {formatDate(order.created_at)}
+                      </Typography>
+                    </Box>
 
-                {/* Items List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-                  {order.items?.map((item) => (
-                    <div
-                      key={item.order_item_id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 13 }}
-                    >
-                      <img
-                        src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=150&q=80'}
-                        alt={item.product_name}
-                        style={{
-                          width: 50,
-                          height: 50,
-                          objectFit: 'contain',
-                          borderRadius: 6,
-                          border: '1px solid #E5E7EB',
-                        }}
-                      />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontWeight: 700,
-                            color: '#111827',
-                            cursor: item.product_slug ? 'pointer' : 'default',
+                    <StatusBadge status={statusInfo.label} />
+                  </Box>
+
+                  {/* Items List */}
+                  <Stack spacing={2} divider={<Divider />}>
+                    {order.items?.map((item) => (
+                      <Box key={item.order_item_id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box
+                          component="img"
+                          src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=150&q=80'}
+                          alt={item.product_name}
+                          sx={{
+                            width: 60,
+                            height: 60,
+                            objectFit: 'contain',
+                            borderRadius: 2,
+                            border: '1px solid #E5E7EB',
+                            p: 0.5,
+                            backgroundColor: '#FFFFFF',
+                            flexShrink: 0,
                           }}
-                          onClick={() => {
-                            if (item.product_slug) {
-                              onNavigate(`product/${item.product_slug}`);
-                            }
-                          }}
-                        >
-                          {item.product_name}
-                        </div>
-                        {item.variant_name && (
-                          <div style={{ fontSize: 11.5, color: '#6B7280' }}>Bản: {item.variant_name}</div>
-                        )}
-                        <div style={{ color: '#4B5563', marginTop: 2 }}>
-                          {item.quantity} × {formatPrice(item.unit_price)}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ fontWeight: 800, color: '#111827', fontSize: 14 }}>
-                          {formatPrice(parseFloat(item.unit_price) * item.quantity)}
-                        </div>
-                        {order.order_status === 'completed' && item.product_slug && (
-                          <button
-                            type="button"
-                            onClick={() => onNavigate(`product/${item.product_slug}`)}
-                            style={{
-                              fontSize: 12,
+                        />
+
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="subtitle2"
+                            onClick={() => item.product_slug && onNavigate(`product/${item.product_slug}`)}
+                            sx={{
                               fontWeight: 700,
-                              color: 'var(--primary)',
-                              backgroundColor: '#FEE2E2',
-                              padding: '5px 10px',
-                              borderRadius: 6,
-                              cursor: 'pointer',
-                              border: 'none',
+                              cursor: item.product_slug ? 'pointer' : 'default',
+                              '&:hover': item.product_slug ? { color: 'primary.main' } : {},
                             }}
                           >
-                            Đánh giá ngay
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                            {item.product_name}
+                          </Typography>
+                          {item.variant_name && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                              Bản: {item.variant_name}
+                            </Typography>
+                          )}
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            SL: {item.quantity} × {formatPrice(item.unit_price)}
+                          </Typography>
+                        </Box>
 
-                {/* Footer Total & Actions */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid var(--border-subtle)',
-                    paddingTop: 14,
-                    flexWrap: 'wrap',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 12.5, color: '#6B7280', maxWidth: '60%' }}>
-                    Giao tới: <strong>{order.recipient_name || user.full_name}</strong> ({order.recipient_phone || '—'}) - {order.shipping_address || order.street_address || 'Địa chỉ giao hàng'}
-                  </div>
+                        <Box sx={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
+                            {formatPrice(parseFloat(item.unit_price) * item.quantity)}
+                          </Typography>
+                          {order.order_status === 'completed' && item.product_slug && (
+                            <AppButton
+                              variant="soft"
+                              size="small"
+                              onClick={() => onNavigate(`product/${item.product_slug}`)}
+                            >
+                              Đánh giá
+                            </AppButton>
+                          )}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Stack>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontSize: 13, color: '#4B5563' }}>Tổng số tiền:</span>
-                      <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--primary)' }}>
+                  <Divider sx={{ my: 2.5 }} />
+
+                  {/* Order Footer & Actions */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        Tổng thanh toán:
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>
                         {formatPrice(order.total_amount)}
-                      </span>
-                    </div>
+                      </Typography>
+                    </Box>
 
-                    {order.order_status === 'pending' && (
-                      <button
-                        type="button"
-                        disabled={cancellingId === order.order_id}
-                        onClick={() => handleCancelOrder(order.order_id)}
-                        style={{
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          color: '#EF4444',
-                          border: '1px solid #FECACA',
-                          backgroundColor: '#FEF2F2',
-                          padding: '6px 14px',
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                        }}
+                    <Stack direction="row" spacing={1.5}>
+                      {['pending', 'processing'].includes(order.order_status) && (
+                        <AppButton
+                          variant="ghost"
+                          size="small"
+                          loading={cancellingId === order.order_id}
+                          onClick={() => handleCancelOrder(order.order_id)}
+                          sx={{ color: 'error.main' }}
+                        >
+                          Hủy đơn
+                        </AppButton>
+                      )}
+                      <AppButton
+                        variant="primary"
+                        size="small"
+                        onClick={() => onNavigate(`order-success/${order.order_code}`)}
                       >
-                        {cancellingId === order.order_id ? 'Đang hủy...' : 'Hủy đơn hàng'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                        Chi tiết đơn
+                      </AppButton>
+                    </Stack>
+                  </Box>
+                </Paper>
+              );
+            })}
+          </Stack>
+        )}
+      </Container>
+    </Box>
   );
 };
+
+export default MyOrdersPage;

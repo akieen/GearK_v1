@@ -1,11 +1,23 @@
 import React, { useState, useRef } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import CircularProgress from '@mui/material/CircularProgress';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+import StarIcon from '@mui/icons-material/Star';
+import AddLinkIcon from '@mui/icons-material/AddLink';
+
 import { uploadApi } from '../../api/productApi';
 import { useToast } from '../../context/ToastContext';
-import Icons from './Icons';
 
 export default function ImageUploadField({
   label = 'Hình ảnh',
-  value = '', // URL string if single, or array of strings/objects if multiple
+  value = '',
   onChange,
   multiple = false,
   placeholder = 'Chọn tệp ảnh từ máy tính hoặc dán URL...',
@@ -18,11 +30,9 @@ export default function ImageUploadField({
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState('');
 
-  // Handle uploading files via Multer
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
 
-    // Validate size & type on client side before sending
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       if (!f.type.startsWith('image/')) {
@@ -99,66 +109,51 @@ export default function ImageUploadField({
     }
   };
 
-  // Convert value for display
   const imagesList = multiple
     ? (Array.isArray(value) ? value : (value ? [value] : []))
     : (value ? [value] : []);
 
   return (
-    <div className="form-group" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <label className="form-label" style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>
+    <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>
           {label}
-        </label>
-        <button
-          type="button"
+        </Typography>
+        <Button
+          size="small"
           onClick={() => setShowUrlInput(!showUrlInput)}
-          style={{
-            fontSize: 12,
-            color: 'var(--primary)',
-            background: 'none',
-            border: 'none',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            padding: 0,
-            fontWeight: 600,
-          }}
+          startIcon={<AddLinkIcon fontSize="small" />}
+          sx={{ fontSize: '0.75rem', p: 0.5 }}
         >
-          {showUrlInput ? 'Ẩn nhập URL' : '+ Nhập link URL ảnh'}
-        </button>
-      </div>
+          {showUrlInput ? 'Ẩn URL' : '+ Dán URL ảnh'}
+        </Button>
+      </Box>
 
-      {/* Manual URL input option */}
+      {/* Manual URL Input */}
       {showUrlInput && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <input
-            type="url"
-            className="form-input"
-            style={{ flex: 1, fontSize: 13 }}
+        <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+          <TextField
+            size="small"
+            fullWidth
             placeholder="https://images.unsplash.com/photo-..."
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
           />
-          <button
-            type="button"
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
             onClick={handleAddUrl}
-            style={{
-              backgroundColor: 'var(--primary)',
-              color: '#FFF',
-              padding: '6px 14px',
-              borderRadius: 6,
-              fontWeight: 700,
-              fontSize: 12.5,
-              whiteSpace: 'nowrap',
-            }}
+            sx={{ flexShrink: 0 }}
           >
             Thêm
-          </button>
-        </div>
+          </Button>
+        </Box>
       )}
 
-      {/* Drag & Drop File Upload Box (Multer powered) */}
-      <div
+      {/* Drop Zone */}
+      <Paper
+        variant="outlined"
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragOver(true);
@@ -166,11 +161,13 @@ export default function ImageUploadField({
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
         onClick={() => !uploading && fileInputRef.current?.click()}
-        style={{
-          border: isDragOver ? '2px dashed var(--primary)' : '2px dashed #CBD5E1',
+        sx={{
+          borderStyle: 'dashed',
+          borderWidth: 2,
+          borderColor: isDragOver ? 'primary.main' : '#CBD5E1',
           backgroundColor: isDragOver ? 'rgba(227, 0, 25, 0.04)' : '#F8FAFC',
-          borderRadius: 8,
-          padding: '16px 20px',
+          borderRadius: 2.5,
+          p: 2.5,
           textAlign: 'center',
           cursor: uploading ? 'wait' : 'pointer',
           transition: 'all 0.2s ease',
@@ -178,7 +175,7 @@ export default function ImageUploadField({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 6,
+          gap: 1,
         }}
       >
         <input
@@ -190,163 +187,126 @@ export default function ImageUploadField({
           onChange={(e) => handleFiles(e.target.files)}
         />
 
-        <div
-          style={{
-            width: 40,
-            height: 40,
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
             borderRadius: '50%',
-            backgroundColor: uploading ? '#EFF6FF' : '#FEE2E2',
-            color: uploading ? '#2563EB' : 'var(--primary)',
+            backgroundColor: uploading ? '#DBEAFE' : '#FEE2E2',
+            color: uploading ? 'info.main' : 'primary.main',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          {uploading ? (
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                border: '2px solid #2563EB',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-              }}
-            />
-          ) : (
-            <Icons.Upload size={20} />
-          )}
-        </div>
+          {uploading ? <CircularProgress size={22} color="inherit" /> : <CloudUploadIcon />}
+        </Box>
 
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
-          {uploading ? 'Đang tải tệp lên server qua Multer...' : (multiple ? 'Chọn hoặc kéo thả nhiều tệp ảnh' : 'Chọn hoặc kéo thả tệp ảnh vào đây')}
-        </div>
-        <div style={{ fontSize: 11.5, color: '#64748B' }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          {uploading ? 'Đang tải ảnh lên server...' : 'Kéo thả ảnh vào đây, hoặc bấm để duyệt file'}
+        </Typography>
+
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {hint}
-        </div>
-      </div>
+        </Typography>
+      </Paper>
 
-      {/* Thumbnails Display Grid */}
+      {/* Thumbnails Preview */}
       {imagesList.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 10,
-            marginTop: 12,
-            alignItems: 'center',
-          }}
-        >
+        <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
           {imagesList.map((img, idx) => {
-            const imgUrl = typeof img === 'string' ? img : img.image_url;
-            const isPrimary = multiple ? idx === 0 : true;
+            const url = typeof img === 'string' ? img : img?.image_url;
+            const isFirst = idx === 0;
 
             return (
-              <div
+              <Box
                 key={idx}
-                style={{
+                sx={{
                   position: 'relative',
-                  width: 70,
-                  height: 70,
-                  borderRadius: 6,
-                  border: isPrimary ? '2px solid var(--primary)' : '1px solid #E2E8F0',
+                  width: 80,
+                  height: 80,
+                  borderRadius: 2,
+                  border: isFirst ? '2px solid #E30019' : '1px solid #E5E7EB',
                   overflow: 'hidden',
                   backgroundColor: '#FFFFFF',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                  flexShrink: 0,
                 }}
               >
-                <img
-                  src={imgUrl}
-                  alt={`Preview ${idx}`}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  onError={(e) => {
-                    e.target.src = 'https://placehold.co/100x100?text=Loi+Anh';
-                  }}
+                <Box
+                  component="img"
+                  src={url}
+                  alt={`Upload ${idx}`}
+                  sx={{ width: '100%', height: '100%', objectFit: 'contain', p: 0.5 }}
                 />
 
-                {/* Primary Tag */}
-                {isPrimary && (
-                  <span
-                    style={{
+                {isFirst && multiple && (
+                  <Box
+                    sx={{
                       position: 'absolute',
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      backgroundColor: 'var(--primary)',
+                      backgroundColor: 'primary.main',
                       color: '#FFF',
-                      fontSize: 9,
+                      fontSize: '0.625rem',
                       fontWeight: 800,
                       textAlign: 'center',
-                      padding: '1px 0',
-                      textTransform: 'uppercase',
+                      py: 0.2,
                     }}
                   >
-                    Chính
-                  </span>
+                    Ảnh chính
+                  </Box>
                 )}
 
-                {/* Set Primary Button for multiple images (if not primary) */}
-                {multiple && !isPrimary && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetPrimary(idx);
-                    }}
-                    title="Đặt làm ảnh chính"
-                    style={{
-                      position: 'absolute',
-                      top: 2,
-                      left: 2,
-                      width: 18,
-                      height: 18,
-                      borderRadius: 3,
-                      backgroundColor: 'rgba(255,255,255,0.9)',
-                      color: '#4B5563',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid #D1D5DB',
-                      cursor: 'pointer',
-                      fontSize: 10,
-                    }}
-                  >
-                    ⭐
-                  </button>
-                )}
-
-                {/* Delete button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveImage(idx);
-                  }}
-                  title="Xóa ảnh này"
-                  style={{
+                {/* Actions overlay */}
+                <Box
+                  sx={{
                     position: 'absolute',
                     top: 2,
                     right: 2,
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-                    color: '#FFF',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: 'none',
-                    cursor: 'pointer',
+                    gap: 0.5,
                   }}
                 >
-                  <Icons.X size={12} />
-                </button>
-              </div>
+                  {multiple && !isFirst && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSetPrimary(idx);
+                      }}
+                      title="Đặt làm ảnh chính"
+                      sx={{
+                        p: 0.25,
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        color: '#F59E0B',
+                        '&:hover': { backgroundColor: '#FFFFFF' },
+                      }}
+                    >
+                      <StarIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  )}
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveImage(idx);
+                    }}
+                    title="Xóa ảnh"
+                    sx={{
+                      p: 0.25,
+                      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                      color: 'error.main',
+                      '&:hover': { backgroundColor: '#FFFFFF' },
+                    }}
+                  >
+                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Box>
+              </Box>
             );
           })}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

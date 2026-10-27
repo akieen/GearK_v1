@@ -1,7 +1,19 @@
 import React from 'react';
+import Drawer from '@mui/material/Drawer';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import CloseIcon from '@mui/icons-material/Close';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../utils/formatters';
-import Icons from './Icons';
+import { AppButton } from '../ui/AppButton';
 
 export const CartDrawer = ({ onNavigate }) => {
   const {
@@ -14,164 +26,265 @@ export const CartDrawer = ({ onNavigate }) => {
     cartCount,
   } = useCart();
 
-  if (!isCartDrawerOpen) return null;
+  const handleGoToCart = () => {
+    setIsCartDrawerOpen(false);
+    onNavigate('cart');
+  };
+
+  const handleGoToCheckout = () => {
+    setIsCartDrawerOpen(false);
+    onNavigate('checkout');
+  };
 
   return (
-    <div className="drawer-overlay" onClick={() => setIsCartDrawerOpen(false)}>
-      <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
-        <div className="drawer-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icons.ShoppingCart size={22} style={{ color: 'var(--primary)' }} />
-            <h3 style={{ fontSize: 17, fontWeight: 800 }}>
-              Giỏ hàng của bạn ({cartCount})
-            </h3>
-          </div>
-          <button
-            onClick={() => setIsCartDrawerOpen(false)}
-            style={{ color: '#6B7280', padding: 4 }}
+    <Drawer
+      anchor="right"
+      open={isCartDrawerOpen}
+      onClose={() => setIsCartDrawerOpen(false)}
+      PaperProps={{
+        sx: {
+          width: { xs: '100%', sm: 420 },
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: '#FFFFFF',
+        },
+      }}
+    >
+      {/* Header */}
+      <Box
+        sx={{
+          p: 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid #E5E7EB',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <ShoppingCartIcon sx={{ color: 'primary.main', fontSize: 24 }} />
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+            Giỏ hàng của bạn ({cartCount})
+          </Typography>
+        </Box>
+        <IconButton
+          onClick={() => setIsCartDrawerOpen(false)}
+          size="small"
+          sx={{ color: 'text.secondary' }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+
+      {/* Body */}
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>
+        {!cart.items || cart.items.length === 0 ? (
+          <Box
+            sx={{
+              py: 8,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
           >
-            <Icons.X size={20} />
-          </button>
-        </div>
-
-        <div className="drawer-body">
-          {(!cart.items || cart.items.length === 0) ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#6B7280' }}>
-              <Icons.ShoppingCart size={48} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
-              <p style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>Giỏ hàng chưa có sản phẩm</p>
-              <p style={{ fontSize: 13, marginTop: 4 }}>Hãy chọn những món Gaming Gear yêu thích nhé!</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {cart.items.map((item) => (
-                <div
-                  key={item.cart_item_id}
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    paddingBottom: 14,
-                    borderBottom: '1px solid var(--border-subtle)',
-                    alignItems: 'center',
+            <ShoppingCartIcon sx={{ fontSize: 64, color: 'text.disabled', opacity: 0.5 }} />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Giỏ hàng chưa có sản phẩm
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Hãy chọn những món Gaming Gear đỉnh cao nhé!
+            </Typography>
+            <AppButton
+              variant="primary"
+              size="small"
+              onClick={() => {
+                setIsCartDrawerOpen(false);
+                onNavigate('products');
+              }}
+              sx={{ mt: 2 }}
+            >
+              Khám phá sản phẩm
+            </AppButton>
+          </Box>
+        ) : (
+          <Stack spacing={2} divider={<Divider />}>
+            {cart.items.map((item) => (
+              <Box
+                key={item.cart_item_id}
+                sx={{
+                  display: 'flex',
+                  gap: 1.5,
+                  alignItems: 'flex-start',
+                }}
+              >
+                {/* Thumbnail */}
+                <Box
+                  component="img"
+                  src={
+                    item.thumbnail_url ||
+                    'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=200&q=80'
+                  }
+                  alt={item.product_name}
+                  sx={{
+                    width: 70,
+                    height: 70,
+                    objectFit: 'contain',
+                    borderRadius: 2,
+                    border: '1px solid #E5E7EB',
+                    p: 0.5,
+                    backgroundColor: '#FFFFFF',
+                    flexShrink: 0,
                   }}
-                >
-                  <img
-                    src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=200&q=80'}
-                    alt={item.product_name}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      objectFit: 'contain',
-                      borderRadius: 6,
-                      border: '1px solid var(--border-light)',
-                      backgroundColor: '#fff',
-                      padding: 4,
-                    }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 13,
-                        color: '#111827',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title={item.product_name}
-                    >
-                      {item.product_name}
-                    </div>
-                    {item.variant_name && (
-                      <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 2 }}>
-                        Bản: {item.variant_name}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                      <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 13.5 }}>
-                        {formatPrice(item.sale_price || item.price)}
-                      </span>
-                      <div className="quantity-control" style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}>
-                        <button
-                          className="quantity-btn"
-                          onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
-                        >
-                          <Icons.Minus size={14} />
-                        </button>
-                        <input className="quantity-input" readOnly value={item.quantity} />
-                        <button
-                          className="quantity-btn"
-                          onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
-                        >
-                          <Icons.Plus size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeItem(item.cart_item_id)}
-                    style={{ color: '#9CA3AF', padding: 4 }}
-                    title="Xóa sản phẩm"
-                  >
-                    <Icons.Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                />
 
-        {cart.items && cart.items.length > 0 && (
-          <div className="drawer-footer">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 14, color: '#4B5563', fontWeight: 600 }}>Tạm tính:</span>
-              <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--primary)' }}>
-                {formatPrice(cartTotal)}
-              </span>
-            </div>
-            <p style={{ fontSize: 11.5, color: '#6B7280', marginBottom: 14 }}>
-              * Miễn phí giao hàng toàn quốc cho đơn từ 500.000₫
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => {
-                  setIsCartDrawerOpen(false);
-                  onNavigate('cart');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '11px',
-                  borderRadius: 6,
-                  border: '1.5px solid var(--border-light)',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  color: '#111827',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                Xem giỏ hàng
-              </button>
-              <button
-                onClick={() => {
-                  setIsCartDrawerOpen(false);
-                  onNavigate('checkout');
-                }}
-                style={{
-                  flex: 1.2,
-                  padding: '11px',
-                  borderRadius: 6,
-                  backgroundColor: 'var(--primary)',
-                  fontWeight: 800,
-                  fontSize: 13,
-                  color: '#FFFFFF',
-                  boxShadow: 'var(--shadow-primary)',
-                }}
-              >
-                Thanh toán ngay
-              </button>
-            </div>
-          </div>
+                {/* Details */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 700,
+                      color: 'text.primary',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={item.product_name}
+                  >
+                    {item.product_name}
+                  </Typography>
+
+                  {item.variant_name && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}
+                    >
+                      Bản: {item.variant_name}
+                    </Typography>
+                  )}
+
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 800,
+                      color: 'primary.main',
+                      mt: 0.5,
+                    }}
+                  >
+                    {formatPrice(item.sale_price || item.price)}
+                  </Typography>
+
+                  {/* Quantity and Remove */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mt: 1,
+                    }}
+                  >
+                    {/* Stepper */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 1.5,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
+                        sx={{ p: 0.5, borderRadius: 0 }}
+                      >
+                        <RemoveIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          px: 1.5,
+                          fontWeight: 700,
+                          minWidth: 28,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {item.quantity}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
+                        sx={{ p: 0.5, borderRadius: 0 }}
+                      >
+                        <AddIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Box>
+
+                    {/* Remove */}
+                    <IconButton
+                      size="small"
+                      onClick={() => removeItem(item.cart_item_id)}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+                      title="Xóa khỏi giỏ"
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </Stack>
         )}
-      </div>
-    </div>
+      </Box>
+
+      {/* Footer */}
+      {cart.items && cart.items.length > 0 && (
+        <Box
+          sx={{
+            p: 2.5,
+            borderTop: '1px solid #E5E7EB',
+            backgroundColor: '#FAFAFA',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 2,
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+              Tạm tính:
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>
+              {formatPrice(cartTotal)}
+            </Typography>
+          </Box>
+
+          <Stack spacing={1.25}>
+            <AppButton
+              variant="primary"
+              fullWidth
+              size="large"
+              glow
+              onClick={handleGoToCheckout}
+            >
+              Tiến hành thanh toán
+            </AppButton>
+            <AppButton
+              variant="outline"
+              fullWidth
+              size="medium"
+              onClick={handleGoToCart}
+            >
+              Xem chi tiết giỏ hàng
+            </AppButton>
+          </Stack>
+        </Box>
+      )}
+    </Drawer>
   );
 };
+
+export default CartDrawer;

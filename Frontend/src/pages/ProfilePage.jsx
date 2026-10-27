@@ -1,9 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
+import IconButton from '@mui/material/IconButton';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Chip from '@mui/material/Chip';
+
+import PersonIcon from '@mui/icons-material/Person';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../api/authApi';
 import { addressApi } from '../api/extraApi';
-import Icons from '../components/common/Icons';
+import { AppButton } from '../components/ui/AppButton';
+import { AppInput } from '../components/ui/AppInput';
+import { EmptyState } from '../components/ui/EmptyState';
 
 export const ProfilePage = ({ onNavigate }) => {
   const { user, openAuthModal, refreshProfile } = useAuth();
@@ -102,234 +119,218 @@ export const ProfilePage = ({ onNavigate }) => {
 
   if (!user) {
     return (
-      <div className="container" style={{ padding: '60px 0', textAlign: 'center' }}>
-        <p style={{ fontWeight: 700, fontSize: 16 }}>Vui lòng đăng nhập để xem thông tin tài khoản.</p>
-        <button
-          onClick={() => openAuthModal('login')}
-          style={{
-            backgroundColor: 'var(--primary)',
-            color: '#FFFFFF',
-            padding: '10px 20px',
-            borderRadius: 6,
-            fontWeight: 700,
-            marginTop: 14,
-          }}
-        >
-          Đăng nhập ngay
-        </button>
-      </div>
+      <Container maxWidth="sm" sx={{ py: 8, textAlign: 'center' }}>
+        <EmptyState
+          icon={<PersonIcon />}
+          title="Vui lòng đăng nhập"
+          description="Đăng nhập để xem và quản lý thông tin hồ sơ của bạn."
+          actionText="Đăng nhập ngay"
+          onAction={() => openAuthModal('login')}
+        />
+      </Container>
     );
   }
 
   return (
-    <div className="container" style={{ padding: '24px 0 48px 0' }}>
-      <div style={{ paddingBottom: 16, borderBottom: '2px solid var(--border-light)', marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>
-          TÀI KHOẢN CỦA TÔI
-        </h2>
-        <p style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-          Quản lý thông tin cá nhân và sổ địa chỉ giao hàng.
-        </p>
-      </div>
+    <Box sx={{ py: 4, pb: 8 }}>
+      <Container maxWidth="lg">
+        {/* Header */}
+        <Box sx={{ mb: 4, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase', color: 'text.primary' }}>
+            Tài khoản của tôi
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Quản lý thông tin cá nhân và sổ địa chỉ giao hàng.
+          </Typography>
+        </Box>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 28 }}>
-        {/* Left: User Profile */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            border: '1px solid var(--border-light)',
-            padding: 24,
-            boxShadow: 'var(--shadow-xs)',
-            height: 'fit-content',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary)',
-                color: '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22,
-                fontWeight: 900,
-              }}
-            >
-              {user.full_name?.charAt(0) || 'G'}
-            </div>
-            <div>
-              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111827' }}>{user.full_name}</h3>
-              <p style={{ fontSize: 13, color: '#6B7280' }}>{user.email}</p>
-              <span
-                style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  backgroundColor: '#FEE2E2',
-                  color: 'var(--primary)',
-                  borderRadius: 4,
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  display: 'inline-block',
-                  marginTop: 4,
-                }}
-              >
-                Vai trò: {user.role}
-              </span>
-            </div>
-          </div>
-
-          <form onSubmit={handleUpdateProfile}>
-            <div className="form-group">
-              <label className="form-label">Họ và tên</label>
-              <input
-                type="text"
-                required
-                className="form-input"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Đổi mật khẩu mới (Bỏ trống nếu không đổi)</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="Nhập mật khẩu mới..."
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={updatingProfile}
-              style={{
-                backgroundColor: 'var(--primary)',
-                color: '#FFFFFF',
-                padding: '10px 20px',
-                borderRadius: 6,
-                fontWeight: 700,
-                fontSize: 13,
-                width: '100%',
-                marginTop: 8,
-              }}
-            >
-              {updatingProfile ? 'Đang cập nhật...' : 'Lưu thay đổi'}
-            </button>
-          </form>
-        </div>
-
-        {/* Right: Address Book */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 12,
-            border: '1px solid var(--border-light)',
-            padding: 24,
-            boxShadow: 'var(--shadow-xs)',
-          }}
-        >
-          <h3 style={{ fontSize: 17, fontWeight: 800, marginBottom: 16, color: '#111827' }}>
-            Sổ địa chỉ nhận hàng ({addresses.length})
-          </h3>
-
-          {/* Existing Addresses */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-            {addresses.map((addr) => (
-              <div
-                key={addr.address_id}
-                style={{
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 8,
-                  padding: 14,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13.5, color: '#111827' }}>
-                    {addr.recipient_name} • {addr.recipient_phone}
-                  </div>
-                  <div style={{ fontSize: 13, color: '#4B5563', marginTop: 4 }}>
-                    {addr.street_address}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDeleteAddress(addr.address_id)}
-                  style={{ color: '#EF4444', padding: 6 }}
-                  title="Xóa địa chỉ này"
+        <Grid container spacing={3.5}>
+          {/* Left: User Profile Form */}
+          <Grid item xs={12} md={5}>
+            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Avatar
+                  sx={{
+                    width: 64,
+                    height: 64,
+                    backgroundColor: 'primary.main',
+                    fontWeight: 900,
+                    fontSize: '1.5rem',
+                  }}
                 >
-                  <Icons.Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+                  {user.full_name?.charAt(0) || 'G'}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                    {user.full_name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {user.email}
+                  </Typography>
+                  <Chip
+                    label={`Vai trò: ${user.role}`}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.6875rem',
+                      fontWeight: 800,
+                      backgroundColor: '#FEE2E2',
+                      color: 'primary.main',
+                      mt: 0.5,
+                    }}
+                  />
+                </Box>
+              </Box>
 
-          {/* Add new address */}
-          <div style={{ backgroundColor: '#F9FAFB', padding: 16, borderRadius: 8 }}>
-            <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: '#111827' }}>
-              + Thêm địa chỉ mới
-            </h4>
-            <form onSubmit={handleAddAddress}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div className="form-group">
-                  <label className="form-label">Tên người nhận</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-input"
-                    placeholder="Nguyễn Văn Khách"
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Số điện thoại</label>
-                  <input
-                    type="tel"
-                    required
-                    className="form-input"
-                    placeholder="0987654321"
-                    value={recipientPhone}
-                    onChange={(e) => setRecipientPhone(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Địa chỉ chi tiết</label>
-                <input
-                  type="text"
+              <Box component="form" onSubmit={handleUpdateProfile}>
+                <AppInput
+                  topLabel="Họ và tên"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="form-input"
-                  placeholder="Số nhà, Tên đường, Quận/Huyện, Tỉnh/TP"
-                  value={streetAddress}
-                  onChange={(e) => setStreetAddress(e.target.value)}
                 />
-              </div>
-              <button
-                type="submit"
-                disabled={addingAddress}
-                style={{
-                  backgroundColor: '#1F2937',
-                  color: '#FFFFFF',
-                  padding: '8px 18px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  fontSize: 13,
-                }}
-              >
-                {addingAddress ? 'Đang thêm...' : 'Thêm địa chỉ'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
+
+                <AppInput
+                  topLabel="Đổi mật khẩu mới (Bỏ trống nếu không đổi)"
+                  type="password"
+                  placeholder="Nhập mật khẩu mới..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  sx={{ mb: 2 }}
+                />
+
+                <AppButton
+                  type="submit"
+                  variant="primary"
+                  fullWidth
+                  loading={updatingProfile}
+                >
+                  Lưu thay đổi hồ sơ
+                </AppButton>
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Right: Address Book */}
+          <Grid item xs={12} md={7}>
+            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+                <LocationOnIcon sx={{ color: 'primary.main', fontSize: 24 }} />
+                <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                  Sổ địa chỉ giao hàng ({addresses.length})
+                </Typography>
+              </Box>
+
+              {/* Existing Addresses List */}
+              <Stack spacing={1.5} sx={{ mb: 3 }}>
+                {addresses.length === 0 ? (
+                  <Typography variant="body2" sx={{ color: 'text.secondary', py: 1 }}>
+                    Bạn chưa có địa chỉ giao hàng nào trong sổ. Hãy thêm bên dưới:
+                  </Typography>
+                ) : (
+                  addresses.map((addr) => (
+                    <Paper
+                      key={addr.address_id}
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#F8FAFC',
+                      }}
+                    >
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                            {addr.recipient_name} • {addr.recipient_phone}
+                          </Typography>
+                          {addr.is_default ? (
+                            <Chip
+                              label="Mặc định"
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.625rem',
+                                fontWeight: 800,
+                                backgroundColor: '#D1FAE5',
+                                color: '#065F46',
+                              }}
+                            />
+                          ) : null}
+                        </Box>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+                          {addr.street_address}
+                        </Typography>
+                      </Box>
+
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteAddress(addr.address_id)}
+                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Paper>
+                  ))
+                )}
+              </Stack>
+
+              <Divider sx={{ mb: 2.5 }} />
+
+              {/* Add New Address Form */}
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2 }}>
+                + Thêm địa chỉ mới
+              </Typography>
+
+              <Box component="form" onSubmit={handleAddAddress}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <AppInput
+                      topLabel="Họ tên người nhận"
+                      placeholder="Nguyễn Văn Khách"
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <AppInput
+                      topLabel="Số điện thoại"
+                      placeholder="0987654321"
+                      type="tel"
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)}
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <AppInput
+                      topLabel="Địa chỉ cụ thể"
+                      placeholder="Số nhà, đường, phường, quận..."
+                      value={streetAddress}
+                      onChange={(e) => setStreetAddress(e.target.value)}
+                      required
+                    />
+                  </Grid>
+                </Grid>
+
+                <AppButton
+                  type="submit"
+                  variant="outline"
+                  loading={addingAddress}
+                  sx={{ mt: 2 }}
+                >
+                  Thêm địa chỉ vào sổ
+                </AppButton>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 };
+
+export default ProfilePage;

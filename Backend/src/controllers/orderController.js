@@ -372,7 +372,7 @@ async function getOrderDetail(req, res, next) {
 // [GET] /api/orders/admin/all (Admin / Staff only)
 async function getAllOrders(req, res, next) {
   try {
-    const { order_status, payment_status, search, page = 1, limit = 20 } = req.query;
+    const { order_status, status, payment_status, search, page = 1, limit = 100 } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.max(1, parseInt(limit, 10));
@@ -381,9 +381,10 @@ async function getAllOrders(req, res, next) {
     const whereConditions = [];
     const params = [];
 
-    if (order_status) {
+    const effectiveStatus = order_status || status;
+    if (effectiveStatus) {
       whereConditions.push('o.order_status = ?');
-      params.push(order_status);
+      params.push(effectiveStatus);
     }
     if (payment_status) {
       whereConditions.push('o.payment_status = ?');

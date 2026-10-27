@@ -23,6 +23,8 @@ import { AdminDashboardPage } from './pages/AdminDashboardPage';
 // APIs
 import { productApi } from './api/productApi';
 import { categoryApi, brandApi } from './api/categoryApi';
+import Box from '@mui/material/Box';
+
 // Helper to parse route path and query parameters from hash or path string
 const parseRoute = (path) => {
   const cleanPath = (path || '').replace(/^#\/?/, '').trim();
@@ -144,7 +146,7 @@ function AppContent() {
         />
       )}
 
-      <main style={{ flex: 1 }}>
+      <Box component="main" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {currentRoute === 'home' && (
           <HomePage
             products={products}
@@ -207,7 +209,7 @@ function AppContent() {
         {currentRoute === 'admin' && (
           <AdminDashboardPage onNavigate={navigate} />
         )}
-      </main>
+      </Box>
 
       {!isAdminRoute && <Footer />}
 

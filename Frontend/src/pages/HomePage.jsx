@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+
 import { HeroBanner } from '../components/home/HeroBanner';
 import { TrustFeatures, FlashSaleSection } from '../components/home/HomeSections';
 import { BrandShowcase } from '../components/home/BrandShowcase';
 import ProductCard from '../components/common/ProductCard';
-import Icons from '../components/common/Icons';
+import { SectionTitle } from '../components/ui/SectionTitle';
+import { AppButton } from '../components/ui/AppButton';
 
 export const HomePage = ({
   products = [],
@@ -23,7 +32,7 @@ export const HomePage = ({
       : products.filter((p) => p.category_slug === selectedCatTab);
 
   return (
-    <div style={{ paddingBottom: 40 }}>
+    <Box sx={{ pb: 6 }}>
       {/* Hero Section */}
       <HeroBanner onNavigate={onNavigate} categories={categories} />
 
@@ -34,99 +43,124 @@ export const HomePage = ({
       <FlashSaleSection products={products} onNavigate={onNavigate} />
 
       {/* Gaming Gear by Category Showcase */}
-      <section className="container section-wrapper">
-        <div className="section-header">
-          <h3 className="section-title">GAMING GEAR NỔI BẬT</h3>
-          <div className="section-tabs">
-            <button
-              className={`tab-btn ${selectedCatTab === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedCatTab('all')}
+      <Box component="section" sx={{ mb: 6 }}>
+        <Container maxWidth="lg">
+          <SectionTitle
+            title="GAMING GEAR NỔI BẬT"
+            subtitle="Trang thiết bị tuyển chọn từ các giải đấu eSports hàng đầu"
+            actionText="Xem tất cả"
+            onAction={() => onNavigate('products')}
+          />
+
+          {/* Category Filter Tabs */}
+          <Box sx={{ mb: 3, borderBottom: '1px solid #E5E7EB' }}>
+            <Tabs
+              value={selectedCatTab}
+              onChange={(e, val) => setSelectedCatTab(val)}
+              variant="scrollable"
+              scrollButtons="auto"
+              textColor="primary"
+              indicatorColor="primary"
+              sx={{
+                '& .MuiTab-root': {
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  minHeight: 44,
+                  px: 2,
+                },
+              }}
             >
-              Tất cả
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.category_id}
-                className={`tab-btn ${selectedCatTab === cat.slug ? 'active' : ''}`}
-                onClick={() => setSelectedCatTab(cat.slug)}
-              >
-                {cat.category_name}
-              </button>
-            ))}
-          </div>
-          <button
-            className="view-all-link"
-            onClick={() => onNavigate('products')}
+              <Tab value="all" label="Tất cả sản phẩm" />
+              {categories.map((cat) => (
+                <Tab key={cat.category_id} value={cat.slug} label={cat.category_name} />
+              ))}
+            </Tabs>
+          </Box>
+
+          {/* Products Grid (CSS Grid: 4 columns on desktop, 2 on tablet, 1 on mobile) */}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(1, 1fr)',
+                sm: 'repeat(2, 1fr)',
+                md: 'repeat(4, 1fr)',
+              },
+              gap: 2.5,
+            }}
           >
-            <span>Xem tất cả</span>
-            <Icons.ChevronRight size={14} />
-          </button>
-        </div>
+            {filteredProducts.map((prod) => (
+              <ProductCard key={prod.product_id} product={prod} onNavigate={onNavigate} />
+            ))}
+          </Box>
+        </Container>
+      </Box>
 
-        <div className="products-grid">
-          {filteredProducts.map((prod) => (
-            <ProductCard key={prod.product_id} product={prod} onNavigate={onNavigate} />
-          ))}
-        </div>
-      </section>
-
-      {/* Mid Promotional Graphic Banner */}
-      <div className="container" style={{ marginBottom: 36 }}>
-        <div
-          style={{
+      {/* Mid Promotional Graphic Banner (Lube switch & Workshop) */}
+      <Container maxWidth="lg" sx={{ mb: 6 }}>
+        <Box
+          sx={{
             background: 'linear-gradient(135deg, #7F1D1D 0%, #18181B 100%)',
-            borderRadius: 16,
-            padding: '36px 48px',
+            borderRadius: 4,
+            p: { xs: 3, sm: 5 },
             color: '#FFFFFF',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 20,
+            gap: 3,
             border: '1px solid #991B1B',
-            boxShadow: 'var(--shadow-md)',
+            boxShadow: '0 12px 32px rgba(127, 29, 29, 0.25)',
           }}
         >
-          <div>
-            <span
-              style={{
-                backgroundColor: 'var(--primary)',
-                color: '#fff',
-                fontSize: 11,
-                fontWeight: 800,
-                padding: '4px 8px',
-                borderRadius: 4,
-                textTransform: 'uppercase',
+          <Box sx={{ maxWidth: 640 }}>
+            <Chip
+              label="GEARK WORKSHOP & MODDING"
+              size="small"
+              sx={{
+                backgroundColor: 'primary.main',
+                color: '#FFF',
+                fontWeight: 900,
+                fontSize: '0.6875rem',
+                letterSpacing: '0.04em',
+                mb: 1.5,
               }}
-            >
-              GEARK WORKSHOP & MODDING
-            </span>
-            <h2 style={{ fontSize: 24, fontWeight: 900, marginTop: 8, marginBottom: 6 }}>
+            />
+            <Typography variant="h4" sx={{ fontWeight: 900, mb: 1, lineHeight: 1.25 }}>
               Dịch Vụ Lube Switch, Cân Wire & Mod Phím Cơ Chuyên Nghiệp
-            </h2>
-            <p style={{ color: '#E5E7EB', fontSize: 13.5, maxWidth: 540 }}>
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#E5E7EB', lineHeight: 1.6 }}>
               Nâng tầm trải nghiệm gõ phím với dàn kỹ thuật viên nhiều năm kinh nghiệm tại các showroom GearK. Lấy ngay trong ngày.
-            </p>
-          </div>
-          <button
+            </Typography>
+          </Box>
+
+          <AppButton
+            variant="ghost"
+            size="large"
             onClick={() => onNavigate('products?category=ban-phim-co')}
-            style={{
+            sx={{
               backgroundColor: '#FFFFFF',
-              color: 'var(--primary)',
+              color: 'primary.main',
               fontWeight: 800,
-              fontSize: 14,
-              padding: '12px 24px',
-              borderRadius: 8,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+              px: 3.5,
+              py: 1.5,
+              '&:hover': {
+                backgroundColor: '#F8FAFC',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+              },
             }}
           >
             Khám phá dịch vụ & Gear
-          </button>
-        </div>
-      </div>
+          </AppButton>
+        </Box>
+      </Container>
 
       {/* Brand Partners Showcase */}
       <BrandShowcase brands={brands} onNavigate={onNavigate} />
-    </div>
+    </Box>
   );
 };
+
+export default HomePage;

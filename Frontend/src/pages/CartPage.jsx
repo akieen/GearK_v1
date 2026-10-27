@@ -1,9 +1,29 @@
 import React, { useState } from 'react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Chip from '@mui/material/Chip';
+
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import SecurityIcon from '@mui/icons-material/Security';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+
 import { useCart } from '../context/CartContext';
 import { couponApi } from '../api/extraApi';
 import { useToast } from '../context/ToastContext';
 import { formatPrice } from '../utils/formatters';
-import Icons from '../components/common/Icons';
+import { EmptyState } from '../components/ui/EmptyState';
+import { AppButton } from '../components/ui/AppButton';
 
 export const CartPage = ({ onNavigate }) => {
   const { cart, updateQuantity, removeItem, clearCart, cartTotal } = useCart();
@@ -13,7 +33,6 @@ export const CartPage = ({ onNavigate }) => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
-  // Compute subtotal with fallback to items calculation
   const itemsSubtotal = (cart.items || []).reduce((sum, item) => {
     const itemPrice = parseFloat(item.sale_price ?? item.price ?? 0);
     return sum + itemPrice * (Number(item.quantity) || 1);
@@ -50,224 +69,304 @@ export const CartPage = ({ onNavigate }) => {
 
   if (!cart.items || cart.items.length === 0) {
     return (
-      <div className="container" style={{ padding: '60px 0' }}>
-        <div className="empty-state">
-          <Icons.ShoppingCart size={64} className="empty-state-icon" />
-          <h2 className="empty-state-title">Giỏ hàng của bạn đang trống</h2>
-          <p className="empty-state-desc">
-            Hãy khám phá các thiết bị Gaming Gear đỉnh cao và thêm vào giỏ hàng nhé!
-          </p>
-          <button
-            onClick={() => onNavigate('products')}
-            style={{
-              backgroundColor: 'var(--primary)',
-              color: '#FFFFFF',
-              padding: '12px 28px',
-              borderRadius: 8,
-              fontWeight: 800,
-              fontSize: 14,
-            }}
-          >
-            TIẾP TỤC MUA SẮM
-          </button>
-        </div>
-      </div>
+      <Container maxWidth="md" sx={{ py: 8 }}>
+        <EmptyState
+          icon={<ShoppingCartIcon />}
+          title="Giỏ hàng của bạn đang trống"
+          description="Hãy khám phá các thiết bị Gaming Gear đỉnh cao và thêm vào giỏ hàng nhé!"
+          actionText="Tiếp tục mua sắm"
+          onAction={() => onNavigate('products')}
+        />
+      </Container>
     );
   }
 
   return (
-    <div className="container">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '24px 0 16px 0',
-          borderBottom: '2px solid var(--border-light)',
-        }}
-      >
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111827' }}>
-          GIỎ HÀNG CỦA BẠN ({cart.items.length} món)
-        </h2>
-        <button
-          onClick={clearCart}
-          style={{
-            fontSize: 12.5,
-            color: '#EF4444',
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <Icons.Trash2 size={14} />
-          Xóa toàn bộ giỏ
-        </button>
-      </div>
+    <Box sx={{ py: 4, pb: 8 }}>
+      <Container maxWidth="lg">
+        {/* Page Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
+          <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase' }}>
+            Giỏ hàng của bạn ({cart.items.length} món)
+          </Typography>
+          <Button
+            size="small"
+            startIcon={<DeleteOutlineIcon fontSize="small" />}
+            onClick={clearCart}
+            sx={{ color: 'error.main', fontWeight: 700 }}
+          >
+            Xóa toàn bộ giỏ
+          </Button>
+        </Box>
 
-      <div className="cart-layout">
-        {/* Cart Items List */}
-        <div className="cart-card">
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {cart.items.map((item) => (
-              <div key={item.cart_item_id} className="cart-item">
-                <img
-                  src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=200&q=80'}
-                  alt={item.product_name}
-                  className="cart-item-thumb"
-                />
+        <Grid container spacing={3.5}>
+          {/* Cart Items List */}
+          <Grid item xs={12} md={8}>
+            <Paper elevation={1} sx={{ borderRadius: 3, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+              <Stack divider={<Divider />}>
+                {cart.items.map((item) => {
+                  const unitPrice = parseFloat(item.sale_price || item.price || 0);
+                  const originalUnitPrice = parseFloat(item.price || unitPrice);
+                  const hasDiscount = originalUnitPrice > unitPrice;
 
-                <div>
-                  <h4
-                    className="cart-item-title"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => onNavigate(`product/${item.slug}`)}
-                  >
-                    {item.product_name}
-                  </h4>
-                  {item.variant_name && (
-                    <div className="cart-item-variant">Bản: {item.variant_name}</div>
-                  )}
-                  <div style={{ fontSize: 11.5, color: '#10B981', fontWeight: 600, marginTop: 4 }}>
-                    ✓ Có sẵn tại kho GearK
-                  </div>
-                </div>
+                  return (
+                    <Box
+                      key={item.cart_item_id}
+                      sx={{
+                        p: 2.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                      }}
+                    >
+                      {/* Product Thumbnail */}
+                      <Box
+                        component="img"
+                        src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=200&q=80'}
+                        alt={item.product_name}
+                        onClick={() => onNavigate(`product/${item.slug}`)}
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          objectFit: 'contain',
+                          p: 0.5,
+                          borderRadius: 2,
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: '#FFFFFF',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      />
 
-                <div className="quantity-control">
-                  <button
-                    className="quantity-btn"
-                    onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
-                  >
-                    <Icons.Minus size={14} />
-                  </button>
-                  <input className="quantity-input" readOnly value={item.quantity} />
-                  <button
-                    className="quantity-btn"
-                    onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
-                  >
-                    <Icons.Plus size={14} />
-                  </button>
-                </div>
+                      {/* Info */}
+                      <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 0 } }}>
+                        <Typography
+                          variant="subtitle1"
+                          onClick={() => onNavigate(`product/${item.slug}`)}
+                          sx={{
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            '&:hover': { color: 'primary.main' },
+                          }}
+                        >
+                          {item.product_name}
+                        </Typography>
 
-                <div className="cart-item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                  <span>{formatPrice((parseFloat(item.sale_price || item.price) || 0) * item.quantity)}</span>
-                  {item.sale_price && parseFloat(item.sale_price) < parseFloat(item.price) && (
-                    <span style={{ fontSize: 11.5, color: '#9CA3AF', textDecoration: 'line-through', fontWeight: 500 }}>
-                      {formatPrice((parseFloat(item.price) || 0) * item.quantity)}
-                    </span>
-                  )}
-                </div>
+                        {item.variant_name && (
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                            Phiên bản: {item.variant_name}
+                          </Typography>
+                        )}
 
-                <button
-                  onClick={() => removeItem(item.cart_item_id)}
-                  style={{ color: '#9CA3AF', padding: 6 }}
-                  title="Xóa món này"
-                >
-                  <Icons.Trash2 size={18} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+                        <Chip
+                          label="✓ Có sẵn tại kho GearK"
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: '0.6875rem',
+                            fontWeight: 700,
+                            backgroundColor: '#D1FAE5',
+                            color: '#065F46',
+                            mt: 0.75,
+                          }}
+                        />
+                      </Box>
 
-        {/* Order Summary & Coupon */}
-        <div className="cart-summary-box">
-          <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: '#111827' }}>
-            Tóm tắt đơn hàng
-          </h3>
+                      {/* Quantity Stepper */}
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          border: '1px solid #E5E7EB',
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <IconButton
+                          size="small"
+                          onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
+                          sx={{ p: 0.5, borderRadius: 0 }}
+                        >
+                          <RemoveIcon fontSize="small" />
+                        </IconButton>
+                        <Typography variant="body2" sx={{ px: 1.5, fontWeight: 800, minWidth: 32, textAlign: 'center' }}>
+                          {item.quantity}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
+                          sx={{ p: 0.5, borderRadius: 0 }}
+                        >
+                          <AddIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
 
-          {/* Coupon Input Form */}
-          <form className="coupon-form" onSubmit={handleApplyCoupon}>
-            <input
-              type="text"
-              className="coupon-input"
-              placeholder="Mã giảm giá (VD: GEARK10)"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="coupon-btn"
-              disabled={validatingCoupon}
-            >
-              {validatingCoupon ? 'Kiểm tra...' : 'Áp dụng'}
-            </button>
-          </form>
+                      {/* Price Column */}
+                      <Box sx={{ textAlign: 'right', minWidth: 110 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'primary.main' }}>
+                          {formatPrice(unitPrice * item.quantity)}
+                        </Typography>
+                        {hasDiscount && (
+                          <Typography variant="caption" sx={{ color: 'text.disabled', textDecoration: 'line-through', display: 'block' }}>
+                            {formatPrice(originalUnitPrice * item.quantity)}
+                          </Typography>
+                        )}
+                      </Box>
 
-          {appliedCoupon && (
-            <div
-              style={{
-                backgroundColor: '#D1FAE5',
-                color: '#065F46',
-                padding: '8px 12px',
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 700,
-                marginBottom: 14,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <span>✓ Đã áp dụng mã: {appliedCoupon.coupon_code}</span>
-              <button
-                onClick={() => setAppliedCoupon(null)}
-                style={{ color: '#EF4444', fontWeight: 800 }}
+                      {/* Delete */}
+                      <IconButton
+                        onClick={() => removeItem(item.cart_item_id)}
+                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+                        title="Xóa món này"
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Paper>
+
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="text"
+                onClick={() => onNavigate('products')}
+                sx={{ fontWeight: 700, color: 'text.secondary' }}
               >
-                Gỡ
-              </button>
-            </div>
-          )}
+                ← Tiếp tục lựa chọn sản phẩm khác
+              </Button>
+            </Box>
+          </Grid>
 
-          <div className="summary-row">
-            <span>Tạm tính:</span>
-            <span style={{ fontWeight: 700 }}>{formatPrice(subtotal)}</span>
-          </div>
+          {/* Right Summary Box */}
+          <Grid item xs={12} md={4}>
+            <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
+              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>
+                Tóm tắt đơn hàng
+              </Typography>
 
-          {appliedCoupon && (
-            <div className="summary-row" style={{ color: '#10B981' }}>
-              <span>Giảm giá Voucher:</span>
-              <span style={{ fontWeight: 700 }}>-{formatPrice(discountAmount)}</span>
-            </div>
-          )}
+              {/* Coupon Form */}
+              <Box component="form" onSubmit={handleApplyCoupon} sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Mã Voucher (GEARK10)"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                />
+                <AppButton
+                  type="submit"
+                  variant="primary"
+                  size="small"
+                  loading={validatingCoupon}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Áp dụng
+                </AppButton>
+              </Box>
 
-          <div className="summary-row">
-            <span>Phí vận chuyển:</span>
-            <span style={{ color: '#10B981', fontWeight: 700 }}>MIỄN PHÍ</span>
-          </div>
+              {/* Applied Coupon Display */}
+              {appliedCoupon && (
+                <Box
+                  sx={{
+                    p: 1.25,
+                    px: 1.5,
+                    borderRadius: 2,
+                    backgroundColor: '#D1FAE5',
+                    color: '#065F46',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 2,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LocalOfferIcon fontSize="small" />
+                    <Typography variant="caption" sx={{ fontWeight: 800 }}>
+                      Đã áp dụng mã: {appliedCoupon.coupon_code}
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    onClick={() => setAppliedCoupon(null)}
+                    sx={{ color: 'error.main', fontWeight: 800, minWidth: 'auto', p: 0 }}
+                  >
+                    Gỡ
+                  </Button>
+                </Box>
+              )}
 
-          <div className="summary-row total">
-            <span>Tổng thanh toán:</span>
-            <span>{formatPrice(finalTotal)}</span>
-          </div>
+              {/* Summary Rows */}
+              <Stack spacing={1.5} sx={{ my: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    Tạm tính:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {formatPrice(subtotal)}
+                  </Typography>
+                </Box>
 
-          <p style={{ fontSize: 11.5, color: '#6B7280', marginTop: 10 }}>
-            (Đã bao gồm thuế VAT 10% & phí giao hàng tận nhà)
-          </p>
+                {appliedCoupon && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'success.main' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      Giảm giá Voucher:
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                      -{formatPrice(discountAmount)}
+                    </Typography>
+                  </Box>
+                )}
 
-          <button
-            className="btn-checkout"
-            onClick={() => onNavigate(appliedCoupon ? `checkout?coupon=${appliedCoupon.coupon_code}` : 'checkout')}
-          >
-            TIẾN HÀNH ĐẶT HÀNG
-          </button>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    Phí vận chuyển:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800, color: 'success.main' }}>
+                    MIỄN PHÍ
+                  </Typography>
+                </Box>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              marginTop: 14,
-              fontSize: 12,
-              color: '#6B7280',
-            }}
-          >
-            <Icons.ShieldCheck size={16} style={{ color: '#10B981' }} />
-            <span>Thanh toán an toàn, bảo mật 100%</span>
-          </div>
-        </div>
-      </div>
-    </div>
+                <Divider />
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                    Tổng thanh toán:
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main' }}>
+                    {formatPrice(finalTotal)}
+                  </Typography>
+                </Box>
+              </Stack>
+
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 3 }}>
+                (Đã bao gồm thuế VAT 10% & miễn phí vận chuyển tận nơi)
+              </Typography>
+
+              <AppButton
+                variant="primary"
+                size="large"
+                fullWidth
+                glow
+                onClick={() => onNavigate(appliedCoupon ? `checkout?coupon=${appliedCoupon.coupon_code}` : 'checkout')}
+                sx={{ py: 1.5 }}
+              >
+                Tiến hành đặt hàng
+              </AppButton>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 2, color: 'text.secondary' }}>
+                <SecurityIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  Thanh toán an toàn, bảo mật dữ liệu 100%
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
   );
 };
+
+export default CartPage;

@@ -83,11 +83,15 @@ export const AdminDashboardPage = ({ onNavigate }) => {
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (filterOverride) => {
     setLoadingOrders(true);
     try {
-      const params = {};
-      if (orderFilter) params.status = orderFilter;
+      const targetFilter = filterOverride !== undefined ? filterOverride : orderFilter;
+      const params = { limit: 100 };
+      if (targetFilter) {
+        params.order_status = targetFilter;
+        params.status = targetFilter;
+      }
       const res = await orderApi.getAllOrdersAdmin(params);
       if (res.success && res.data) {
         setOrders(res.data.items || res.data || []);

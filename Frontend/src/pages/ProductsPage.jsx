@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Breadcrumbs from '@mui/material/Breadcrumbs';
+import Link from '@mui/material/Link';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import Pagination from '@mui/material/Pagination';
+import Chip from '@mui/material/Chip';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+
 import { productApi } from '../api/productApi';
 import ProductCard from '../components/common/ProductCard';
-import Icons from '../components/common/Icons';
+import ProductFilterSidebar from '../components/products/ProductFilterSidebar';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 export const ProductsPage = ({
   initialCategory = '',
@@ -85,294 +100,192 @@ export const ProductsPage = ({
     setCurrentPage(1);
   };
 
+  const activeCategoryObj = categories.find((c) => c.slug === categorySlug);
+  const hasActiveFilters = Boolean(categorySlug || brandSlug || searchTerm || minPrice || maxPrice);
+
   return (
-    <div className="container">
-      {/* Breadcrumbs */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 12.5,
-          color: '#6B7280',
-          padding: '16px 0 8px 0',
-        }}
-      >
-        <span
-          style={{ cursor: 'pointer', color: '#111827', fontWeight: 600 }}
-          onClick={() => onNavigate('home')}
+    <Box sx={{ py: 3, pb: 8 }}>
+      <Container maxWidth="lg">
+        {/* Breadcrumbs */}
+        <Breadcrumbs
+          separator={<NavigateNextIcon fontSize="small" />}
+          sx={{ mb: 3, fontSize: '0.84375rem' }}
         >
-          Trang chủ
-        </span>
-        <Icons.ChevronRight size={12} />
-        <span>Sản phẩm</span>
-        {categorySlug && (
-          <>
-            <Icons.ChevronRight size={12} />
-            <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
-              {categories.find((c) => c.slug === categorySlug)?.category_name || categorySlug}
-            </span>
-          </>
-        )}
-      </div>
-
-      <div className="catalog-layout">
-        {/* Left Filter Sidebar */}
-        <aside className="filter-sidebar">
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 16,
-              paddingBottom: 12,
-              borderBottom: '1px solid var(--border-light)',
-            }}
+          <Link
+            underline="hover"
+            color="inherit"
+            sx={{ cursor: 'pointer', fontWeight: 600 }}
+            onClick={() => onNavigate('home')}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 15 }}>
-              <Icons.Sliders size={18} style={{ color: 'var(--primary)' }} />
-              BỘ LỌC TÌM KIẾM
-            </div>
-            <button
-              onClick={handleClearFilters}
-              style={{ fontSize: 11.5, color: '#EF4444', fontWeight: 700 }}
+            Trang chủ
+          </Link>
+          <Typography color="text.primary" sx={{ fontWeight: 600 }}>
+            Sản phẩm
+          </Typography>
+          {activeCategoryObj && (
+            <Typography color="primary.main" sx={{ fontWeight: 700 }}>
+              {activeCategoryObj.category_name}
+            </Typography>
+          )}
+        </Breadcrumbs>
+
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
+          {/* Left Filter Sidebar (Modular & Sticky) */}
+          <ProductFilterSidebar
+            categories={categories}
+            categorySlug={categorySlug}
+            onSelectCategory={(slug) => {
+              setCategorySlug(slug);
+              setCurrentPage(1);
+            }}
+            brands={brands}
+            brandSlug={brandSlug}
+            onSelectBrand={(slug) => {
+              setBrandSlug(slug);
+              setCurrentPage(1);
+            }}
+            minPrice={minPrice}
+            maxPrice={maxPrice}
+            onChangeMinPrice={setMinPrice}
+            onChangeMaxPrice={setMaxPrice}
+            onApplyPrice={() => setCurrentPage(1)}
+            onPricePreset={handlePricePreset}
+            onResetFilters={handleClearFilters}
+            hasActiveFilters={hasActiveFilters}
+          />
+
+          {/* Right Product Grid & Sorting */}
+          <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+            {/* Top Toolbar */}
+            <Paper
+              elevation={1}
+              sx={{
+                p: 1.5,
+                px: 2,
+                mb: 2.5,
+                borderRadius: 2.5,
+                border: '1px solid #E5E7EB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 1.5,
+                backgroundColor: '#FFFFFF',
+              }}
             >
-              Đặt lại
-            </button>
-          </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" component="span" sx={{ fontWeight: 800, fontSize: '0.9375rem' }}>
+                  {activeCategoryObj ? activeCategoryObj.category_name : 'Tất cả Gaming Gear'}
+                </Typography>
+                <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
+                  ({pagination.total || products.length} sản phẩm)
+                </Typography>
 
-          {/* Category Filter */}
-          <div className="filter-group">
-            <h4 className="filter-heading">Danh mục Gaming Gear</h4>
-            <ul className="filter-list">
-              <li>
-                <label className="filter-checkbox-label">
-                  <input
-                    type="radio"
-                    name="filter-cat"
-                    checked={!categorySlug}
-                    onChange={() => {
-                      setCategorySlug('');
-                      setCurrentPage(1);
-                    }}
+                {/* Active Filter Chips */}
+                {categorySlug && activeCategoryObj && (
+                  <Chip
+                    label={`DM: ${activeCategoryObj.category_name}`}
+                    size="small"
+                    onDelete={() => setCategorySlug('')}
+                    sx={{ height: 24, fontSize: '0.72rem', fontWeight: 600 }}
                   />
-                  <span>Tất cả danh mục</span>
-                </label>
-              </li>
-              {categories.map((c) => (
-                <li key={c.category_id}>
-                  <label className="filter-checkbox-label">
-                    <input
-                      type="radio"
-                      name="filter-cat"
-                      checked={categorySlug === c.slug}
-                      onChange={() => {
-                        setCategorySlug(c.slug);
-                        setCurrentPage(1);
-                      }}
-                    />
-                    <span>{c.category_name}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Brand Filter */}
-          <div className="filter-group">
-            <h4 className="filter-heading">Thương hiệu</h4>
-            <ul className="filter-list">
-              <li>
-                <label className="filter-checkbox-label">
-                  <input
-                    type="radio"
-                    name="filter-brand"
-                    checked={!brandSlug}
-                    onChange={() => {
-                      setBrandSlug('');
-                      setCurrentPage(1);
-                    }}
+                )}
+                {brandSlug && (
+                  <Chip
+                    label={`Hãng: ${brands.find((b) => b.slug === brandSlug)?.brand_name || brandSlug}`}
+                    size="small"
+                    onDelete={() => setBrandSlug('')}
+                    sx={{ height: 24, fontSize: '0.72rem', fontWeight: 600 }}
                   />
-                  <span>Tất cả thương hiệu</span>
-                </label>
-              </li>
-              {brands.map((b) => (
-                <li key={b.brand_id}>
-                  <label className="filter-checkbox-label">
-                    <input
-                      type="radio"
-                      name="filter-brand"
-                      checked={brandSlug === b.slug}
-                      onChange={() => {
-                        setBrandSlug(b.slug);
-                        setCurrentPage(1);
-                      }}
-                    />
-                    <span>{b.brand_name}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
+                )}
+                {(minPrice || maxPrice) && (
+                  <Chip
+                    label={`Giá: ${minPrice ? Number(minPrice).toLocaleString('vi-VN') + '₫' : '0₫'} - ${maxPrice ? Number(maxPrice).toLocaleString('vi-VN') + '₫' : '∞'}`}
+                    size="small"
+                    onDelete={() => {
+                      setMinPrice('');
+                      setMaxPrice('');
+                    }}
+                    sx={{ height: 24, fontSize: '0.72rem', fontWeight: 600 }}
+                  />
+                )}
+              </Box>
 
-          {/* Price Presets */}
-          <div className="filter-group">
-            <h4 className="filter-heading">Mức giá</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                { label: 'Dưới 3 triệu', min: '0', max: '3000000' },
-                { label: 'Từ 3 - 5 triệu', min: '3000000', max: '5000000' },
-                { label: 'Từ 5 - 15 triệu', min: '5000000', max: '15000000' },
-                { label: 'Trên 15 triệu (Hi-End)', min: '15000000', max: '' },
-              ].map((range, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handlePricePreset(range.min, range.max)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '6px 10px',
-                    borderRadius: 4,
-                    fontSize: 12.5,
-                    backgroundColor: minPrice === range.min && maxPrice === range.max ? '#FEE2E2' : '#F9FAFB',
-                    color: minPrice === range.min && maxPrice === range.max ? 'var(--primary)' : '#4B5563',
-                    fontWeight: minPrice === range.min && maxPrice === range.max ? 700 : 500,
-                    border: '1px solid var(--border-light)',
-                  }}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  Sắp xếp:
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value)}
+                    sx={{
+                      fontSize: '0.8125rem',
+                      borderRadius: 1.5,
+                      '& .MuiSelect-select': { py: 0.75, px: 1.25 },
+                    }}
+                  >
+                    <MenuItem value="newest">Mới nhất</MenuItem>
+                    <MenuItem value="price_asc">Giá tăng dần</MenuItem>
+                    <MenuItem value="price_desc">Giá giảm dần</MenuItem>
+                    <MenuItem value="rating">Đánh giá cao nhất</MenuItem>
+                    <MenuItem value="name_asc">Tên sản phẩm A-Z</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </Paper>
 
-            {/* Custom Price Range */}
-            <div style={{ marginTop: 12 }}>
-              <span style={{ fontSize: 11.5, color: '#6B7280', fontWeight: 600 }}>Tùy chọn khoảng giá:</span>
-              <div className="filter-price-inputs">
-                <input
-                  type="number"
-                  className="filter-input"
-                  placeholder="Từ (₫)"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
-                />
-                <span>-</span>
-                <input
-                  type="number"
-                  className="filter-input"
-                  placeholder="Đến (₫)"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
-                />
-              </div>
-              <button
-                className="filter-apply-btn"
-                onClick={() => setCurrentPage(1)}
-              >
-                Áp dụng giá
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        {/* Right Product Grid & Sorting */}
-        <main>
-          {/* Catalog Topbar */}
-          <div className="catalog-topbar">
-            <div>
-              <span style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>
-                {categorySlug
-                  ? categories.find((c) => c.slug === categorySlug)?.category_name
-                  : 'Tất cả Gaming Gear'}
-              </span>
-              <span style={{ fontSize: 13, color: '#6B7280', marginLeft: 8 }}>
-                ({pagination.total || products.length} sản phẩm)
-              </span>
-            </div>
-
-            <div className="catalog-sort-group">
-              <span style={{ fontWeight: 600, color: '#4B5563' }}>Sắp xếp theo:</span>
-              <select
-                className="sort-select"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value)}
-              >
-                <option value="newest">Mới nhất</option>
-                <option value="price_asc">Giá tăng dần</option>
-                <option value="price_desc">Giá giảm dần</option>
-                <option value="rating">Đánh giá cao nhất</option>
-                <option value="name_asc">Tên sản phẩm A-Z</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Products Grid or Loading / Empty */}
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: '#6B7280' }}>
-              <p style={{ fontWeight: 700, fontSize: 15 }}>Đang tải danh sách Gaming Gear...</p>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">
-                <Icons.Search size={56} />
-              </div>
-              <h3 className="empty-state-title">Không tìm thấy sản phẩm phù hợp</h3>
-              <p className="empty-state-desc">
-                Thử thay đổi bộ lọc tìm kiếm hoặc từ khóa để khám phá thêm nhiều gear đỉnh cao nhé!
-              </p>
-              <button
-                onClick={handleClearFilters}
-                style={{
-                  backgroundColor: 'var(--primary)',
-                  color: '#FFFFFF',
-                  padding: '10px 20px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  fontSize: 13,
+            {/* Products Content */}
+            {loading ? (
+              <LoadingSpinner message="Đang tải danh sách Gaming Gear..." minHeight={320} />
+            ) : products.length === 0 ? (
+              <EmptyState
+                title="Không tìm thấy sản phẩm phù hợp"
+                description="Thử thay đổi bộ lọc tìm kiếm hoặc từ khóa để khám phá thêm nhiều gear đỉnh cao nhé!"
+                actionText="Xóa tất cả bộ lọc"
+                onAction={handleClearFilters}
+              />
+            ) : (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(1, 1fr)',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                  },
+                  gap: 2.5,
                 }}
               >
-                Xóa tất cả bộ lọc
-              </button>
-            </div>
-          ) : (
-            <div className="products-grid">
-              {products.map((prod) => (
-                <ProductCard key={prod.product_id} product={prod} onNavigate={onNavigate} />
-              ))}
-            </div>
-          )}
+                {products.map((prod) => (
+                  <ProductCard key={prod.product_id} product={prod} onNavigate={onNavigate} />
+                ))}
+              </Box>
+            )}
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="pagination">
-              <button
-                className="page-btn"
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              >
-                <Icons.ChevronLeft size={16} />
-              </button>
-
-              {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  className={`page-btn ${page === currentPage ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button
-                className="page-btn"
-                disabled={currentPage >= pagination.totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
-              >
-                <Icons.ChevronRight size={16} />
-              </button>
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <Pagination
+                  count={pagination.totalPages}
+                  page={currentPage}
+                  onChange={(e, page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  color="primary"
+                  shape="rounded"
+                  size="medium"
+                  showFirstButton
+                  showLastButton
+                />
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </Container>
+    </Box>
   );
 };
+
+export default ProductsPage;

@@ -1,6 +1,9 @@
 import React from 'react';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import Stack from '@mui/material/Stack';
 import { useToastState } from '../../context/ToastContext';
-import Icons from './Icons';
+import { AppDialog } from '../ui/AppDialog';
 
 export const ToastContainer = () => {
   const { toasts, removeToast } = useToastState();
@@ -8,47 +11,57 @@ export const ToastContainer = () => {
   if (!toasts.length) return null;
 
   return (
-    <div className="toast-container">
-      {toasts.map((toast) => (
-        <div key={toast.id} className={`toast-item ${toast.type}`}>
-          {toast.type === 'success' && <Icons.Check size={18} style={{ color: '#10B981' }} />}
-          {toast.type === 'error' && <Icons.X size={18} style={{ color: '#EF4444' }} />}
-          {toast.type === 'warning' && <Icons.Flame size={18} style={{ color: '#F59E0B' }} />}
-          {toast.type === 'info' && <Icons.Sparkles size={18} style={{ color: '#3B82F6' }} />}
-          <span style={{ flex: 1 }}>{toast.message}</span>
-          <button
-            onClick={() => removeToast(toast.id)}
-            style={{ color: '#9CA3AF', padding: 2, display: 'flex' }}
+    <Stack
+      spacing={1}
+      sx={{
+        position: 'fixed',
+        top: 24,
+        right: 24,
+        zIndex: 2000,
+        maxWidth: 380,
+        width: '100%',
+        pointerEvents: 'none',
+      }}
+    >
+      {toasts.map((toast) => {
+        const severity = ['success', 'info', 'warning', 'error'].includes(toast.type)
+          ? toast.type
+          : 'info';
+
+        return (
+          <Alert
+            key={toast.id}
+            severity={severity}
+            onClose={() => removeToast(toast.id)}
+            sx={{
+              pointerEvents: 'auto',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+              borderRadius: 2,
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              alignItems: 'center',
+            }}
           >
-            <Icons.X size={14} />
-          </button>
-        </div>
-      ))}
-    </div>
+            {toast.message}
+          </Alert>
+        );
+      })}
+    </Stack>
   );
 };
 
+// Backwards-compatible Modal export delegating to AppDialog
 export const Modal = ({ isOpen, onClose, title, children, maxWidth = 480 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-card"
-        style={{ maxWidth }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3 className="modal-title">{title}</h3>
-          <button
-            onClick={onClose}
-            style={{ color: '#6B7280', display: 'flex', padding: 4 }}
-          >
-            <Icons.X size={20} />
-          </button>
-        </div>
-        <div className="modal-body">{children}</div>
-      </div>
-    </div>
+    <AppDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      maxWidth={maxWidth}
+    >
+      {children}
+    </AppDialog>
   );
 };
+
+export default ToastContainer;
