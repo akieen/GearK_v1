@@ -874,6 +874,25 @@ ALTER TABLE `wishlist_items`
 ALTER TABLE `coupons`
   ADD COLUMN `start_date` DATETIME NULL,
   ADD COLUMN `end_date` DATETIME NULL;
+
+--
+-- Table structure for table `vnpay_transactions`
+--
+CREATE TABLE IF NOT EXISTS `vnpay_transactions` (
+  `txn_ref` VARCHAR(100) NOT NULL PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `order_data` LONGTEXT NOT NULL,
+  `status` VARCHAR(50) NOT NULL DEFAULT 'pending',
+  `vnp_response_code` VARCHAR(10) DEFAULT NULL,
+  `vnp_transaction_no` VARCHAR(100) DEFAULT NULL,
+  `order_id` BIGINT UNSIGNED DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX (`user_id`),
+  INDEX (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

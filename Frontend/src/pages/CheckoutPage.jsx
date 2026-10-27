@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { addressApi, couponApi } from '../api/extraApi';
 import { orderApi } from '../api/cartApi';
+import { paymentApi } from '../api/paymentApi';
 import { formatPrice } from '../utils/formatters';
 import { AppDialog } from '../components/ui/AppDialog';
 import { AppButton } from '../components/ui/AppButton';
@@ -160,6 +161,36 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   const handleExecuteOrder = async () => {
     setPlacingOrder(true);
     try {
+      if (paymentMethod === 'vnpay') {
+        const payload = {
+          amount: finalTotal,
+          address_id: selectedAddressId,
+          recipient_name: selectedAddress?.recipient_name,
+          recipient_phone: selectedAddress?.recipient_phone,
+          street_address: selectedAddress?.street_address,
+          coupon_code: appliedCoupon ? appliedCoupon.coupon_code : undefined,
+          notes: orderNotes.trim(),
+          items: cart.items.map((it) => ({
+            variant_id: it.variant_id,
+            quantity: it.quantity,
+          })),
+        };
+
+        toast.info('Đang chuyển hướng sang cổng thanh toán VNPAY...');
+        const res = await paymentApi.createPaymentUrl(payload);
+
+        if (res.payment_url || res.data?.payment_url) {
+          const vnpUrl = res.payment_url || res.data?.payment_url;
+          setShowConfirmModal(false);
+          // Chuyển hướng tới trang thanh toán của VNPAY
+          window.location.href = vnpUrl;
+          return;
+        } else {
+          throw new Error(res.message || 'Không thể tạo liên kết thanh toán VNPAY');
+        }
+      }
+
+      // COD và các phương thức thông thường
       const payload = {
         address_id: selectedAddressId,
         payment_method: paymentMethod,
@@ -397,7 +428,58 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                       sx={{ m: 0, width: '100%' }}
                     />
                   </Paper>
+
+                  {/* VNPay Gateway */}
+                  <Paper
+                    variant="outlined"
+                    onClick={() => setPaymentMethod('vnpay')}
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      border: paymentMethod === 'vnpay' ? '2px solid #E30019' : '1px solid #E5E7EB',
+                      backgroundColor: paymentMethod === 'vnpay' ? '#FEF2F2' : '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <FormControlLabel
+                      value="vnpay"
+                      control={<Radio color="primary" />}
+                      label={
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                              Cổng thanh toán trực tuyến VNPAY
+                            </Typography>
+                            <Chip
+                              label="ATM • QR • VISA"
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.625rem',
+                                fontWeight: 800,
+                                backgroundColor: '#E30019',
+                                color: '#FFFFFF',
+                              }}
+                            />
+                          </Box>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            Chuyển sang cổng VNPAY quét mã QR Pay hoặc nhập thẻ ATM nội địa / Visa / Master. Đơn hàng chỉ được tạo sau khi thanh toán thành công.
+                          </Typography>
+                        </Box>
+                      }
+                      sx={{ m: 0, width: '100%' }}
+                    />
+                  </Paper>
                 </RadioGroup>
+
+                {paymentMethod === 'vnpay' && (
+                  <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
+                    <strong>THANH TOÁN AN TOÀN QUA VNPAY:</strong><br />
+                    Khi bấm <strong>"Xác nhận đặt hàng"</strong>, bạn sẽ được tự động chuyển tiếp tới cổng VNPAY. Sau khi thanh toán thành công, hệ thống callback sẽ ghi nhận và tự động tạo đơn hàng cho bạn!
+                  </Alert>
+                )}
 
                 {paymentMethod === 'bank_transfer' && (
                   <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
@@ -536,7 +618,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                 Kiểm tra lại
               </AppButton>
               <AppButton variant="primary" loading={placingOrder} onClick={handleExecuteOrder}>
-                Xác nhận đặt hàng
+                {paymentMethod === 'vnpay' ? 'Chuyển sang VNPAY thanh toán' : 'Xác nhận đặt hàng'}
               </AppButton>
             </>
           }
@@ -570,7 +652,11 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                 Phương thức thanh toán:
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
-                {paymentMethod === 'cod' ? '💵 Tiền mặt khi nhận hàng (COD)' : '🏦 Chuyển khoản ngân hàng (VietQR)'}
+                {paymentMethod === 'cod'
+                  ? '💵 Tiền mặt khi nhận hàng (COD)'
+                  : paymentMethod === 'vnpay'
+                  ? '💳 Cổng thanh toán trực tuyến VNPAY (ATM/QR/Visa)'
+                  : '🏦 Chuyển khoản ngân hàng (VietQR)'}
               </Typography>
             </Paper>
 

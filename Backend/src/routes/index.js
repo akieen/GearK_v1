@@ -15,6 +15,8 @@ const wishlistRoutes = require('./wishlistRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const uploadRoutes = require('./uploadRoutes');
 const inventoryRoutes = require('./inventoryRoutes');
+const paymentRoutes = require('./paymentRoutes');
+const paymentController = require('../controllers/paymentController');
 
 // API Health Check & Database connection status
 router.get('/health', async (req, res) => {
@@ -38,6 +40,9 @@ router.get('/health', async (req, res) => {
   }
 });
 
+// Direct VNPay Return Endpoint matching VNP_RETURN_URL
+router.get('/vnpay_return', paymentController.vnpayReturn);
+
 // Mount modules
 router.use('/auth', authRoutes);
 router.use('/categories', categoryRoutes);
@@ -52,5 +57,6 @@ router.use('/wishlist', wishlistRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/inventory', inventoryRoutes);
+router.use('/payment', paymentRoutes);
 
 module.exports = router;

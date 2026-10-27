@@ -31,15 +31,25 @@ export default function CouponsTab({
   const [editEnd, setEditEnd] = useState('');
   const [updating, setUpdating] = useState(false);
 
+  const toInputDate = (val) => {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const startEdit = (cpn) => {
     setEditingCoupon(cpn);
     setEditCode(cpn.coupon_code || '');
     setEditType(cpn.discount_type || 'percent');
     setEditValue(cpn.discount_value || '');
     setEditLimit(cpn.usage_limit ?? '');
-    // Format to YYYY-MM-DD for date input
-    setEditStart(cpn.start_date ? new Date(cpn.start_date).toISOString().slice(0, 10) : '');
-    setEditEnd(cpn.end_date ? new Date(cpn.end_date).toISOString().slice(0, 10) : '');
+    // Format to YYYY-MM-DD for date input safely without timezone shifting
+    setEditStart(toInputDate(cpn.start_date));
+    setEditEnd(toInputDate(cpn.end_date));
   };
 
   const handleSaveEdit = async (e) => {
@@ -420,44 +430,40 @@ export default function CouponsTab({
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => startEdit(cpn)}
-                            title="Sửa mã"
-                            style={{
-                              color: '#3B82F6',
-                              padding: '5px 8px',
-                              borderRadius: 4,
-                              backgroundColor: '#EFF6FF',
-                              border: '1px solid #BFDBFE',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Icons.Sliders size={14} />
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCoupon(cpn.coupon_id)}
-                            title="Xóa mã"
-                            style={{
-                              color: '#EF4444',
-                              padding: '5px 8px',
-                              borderRadius: 4,
-                              backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Icons.Trash2 size={14} />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => startEdit(cpn)}
+                          title="Sửa mã"
+                          style={{
+                            color: '#3B82F6',
+                            padding: '5px 8px',
+                            borderRadius: 4,
+                            backgroundColor: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Icons.Sliders size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCoupon(cpn.coupon_id)}
+                          title="Xóa mã"
+                          style={{
+                            color: '#EF4444',
+                            padding: '5px 8px',
+                            borderRadius: 4,
+                            backgroundColor: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Icons.Trash2 size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>

@@ -7,8 +7,8 @@ router.post('/validate', couponController.validateCoupon);
 
 // Admin / Staff management
 router.get('/', verifyToken, requireRoles('admin', 'staff'), couponController.getCoupons);
-router.post('/', verifyToken, requireRoles('admin'), couponController.createCoupon);
-router.put('/:id', verifyToken, requireRoles('admin'), couponController.updateCoupon);
-router.delete('/:id', verifyToken, requireRoles('admin'), couponController.deleteCoupon);
+router.post('/', verifyToken, requireRoles('admin', 'staff'), couponController.createCoupon);
+router.put('/:id', verifyToken, requireRoles('admin', 'staff'), couponController.updateCoupon);
+router.delete('/:id', verifyToken, requireRoles('admin', 'staff'), couponController.deleteCoupon);
 
 module.exports = router;

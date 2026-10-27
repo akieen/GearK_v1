@@ -1,239 +1,264 @@
 const { pool } = require('../config/db');
 const { generateOrderCode, successResponse, errorResponse } = require('../utils/helpers');
 
+// Core order creation logic reusable by createOrder and VNPay payment callback
+async function executeOrderCreation(connection, {
+  userId,
+  address_id,
+  recipient_name,
+  recipient_phone,
+  street_address,
+  payment_method = 'COD',
+  coupon_code,
+  items: customItems,
+  payment_status = 'unpaid',
+  paid_at = null,
+  order_status = null
+}) {
+  // 1. Resolve Address
+  let finalAddressId = address_id;
+  if (!finalAddressId) {
+    if (!recipient_name || !recipient_phone || !street_address) {
+      const err = new Error('Vui lòng cung cấp địa chỉ nhận hàng (address_id hoặc thông tin người nhận)');
+      err.status = 400;
+      throw err;
+    }
+    const [addrResult] = await connection.query(
+      'INSERT INTO addresses (user_id, recipient_name, recipient_phone, street_address) VALUES (?, ?, ?, ?)',
+      [userId, recipient_name, recipient_phone, street_address]
+    );
+    finalAddressId = addrResult.insertId;
+  }
+
+  // 2. Resolve Items
+  let orderItemsData = [];
+
+  if (Array.isArray(customItems) && customItems.length > 0) {
+    orderItemsData = customItems;
+  } else {
+    // Get from the user's latest cart
+    const [userCarts] = await connection.query(
+      'SELECT cart_id FROM carts WHERE user_id = ? ORDER BY cart_id DESC LIMIT 1',
+      [userId]
+    );
+    if (userCarts.length === 0) {
+      const err = new Error('Giỏ hàng của bạn đang trống, không thể tạo đơn hàng');
+      err.status = 400;
+      throw err;
+    }
+    const cartId = userCarts[0].cart_id;
+
+    const [cartRows] = await connection.query(
+      `SELECT ci.variant_id, ci.quantity 
+       FROM cart_items ci
+       WHERE ci.cart_id = ?`,
+      [cartId]
+    );
+    if (cartRows.length === 0) {
+      const err = new Error('Giỏ hàng của bạn đang trống, không thể tạo đơn hàng');
+      err.status = 400;
+      throw err;
+    }
+    orderItemsData = cartRows;
+  }
+
+  // Consolidate order items if any duplicate variants exist
+  const itemMap = new Map();
+  for (const item of orderItemsData) {
+    const vId = Number(item.variant_id);
+    const qty = Number(item.quantity) || 1;
+    if (!vId || qty <= 0) continue;
+    itemMap.set(vId, (itemMap.get(vId) || 0) + qty);
+  }
+
+  if (itemMap.size === 0) {
+    const err = new Error('Không có sản phẩm hợp lệ trong đơn hàng để thanh toán');
+    err.status = 400;
+    throw err;
+  }
+
+  // 3. Validate stock & calculate subtotal
+  let subtotal = 0;
+  const itemsToInsert = [];
+
+  for (const [variantId, quantity] of itemMap.entries()) {
+    const [variantRows] = await connection.query(
+      `SELECT v.variant_id, v.variant_name, v.price, v.sale_price, v.stock, p.product_name
+       FROM product_variants v
+       JOIN products p ON v.product_id = p.product_id
+       WHERE v.variant_id = ? FOR UPDATE`,
+      [variantId]
+    );
+
+    if (variantRows.length === 0) {
+      const err = new Error(`Sản phẩm với mã phiên bản ${variantId} không tồn tại`);
+      err.status = 404;
+      throw err;
+    }
+
+    const variant = variantRows[0];
+
+    if (variant.stock < quantity) {
+      const err = new Error(
+        `Sản phẩm "${variant.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho (bạn đặt ${quantity})`
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    const unitPrice = variant.sale_price !== null ? Number(variant.sale_price) : Number(variant.price);
+    const lineTotal = unitPrice * quantity;
+    subtotal += lineTotal;
+
+    itemsToInsert.push({
+      variant_id: variant.variant_id,
+      product_name: variant.product_name,
+      variant_name: variant.variant_name,
+      unit_price: unitPrice,
+      quantity,
+      line_total: lineTotal,
+      current_stock: variant.stock
+    });
+  }
+
+  // 4. Handle Coupon discount
+  let discountAmount = 0;
+  let appliedCouponId = null;
+
+  if (coupon_code) {
+    const [coupons] = await connection.query(
+      'SELECT * FROM coupons WHERE coupon_code = ? LIMIT 1',
+      [coupon_code]
+    );
+    if (coupons.length > 0) {
+      const cp = coupons[0];
+      const now = new Date();
+
+      if (cp.start_date && new Date(cp.start_date) > now) {
+        const err = new Error(`Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(cp.start_date).toLocaleDateString('vi-VN')})`);
+        err.status = 400;
+        throw err;
+      }
+      if (cp.end_date && new Date(cp.end_date) < now) {
+        const err = new Error('Mã giảm giá đã hết hạn sử dụng');
+        err.status = 400;
+        throw err;
+      }
+
+      if (cp.usage_limit !== null && cp.used_count >= cp.usage_limit) {
+        const err = new Error('Mã giảm giá đã hết lượt sử dụng');
+        err.status = 400;
+        throw err;
+      }
+      appliedCouponId = cp.coupon_id;
+      if (cp.discount_type === 'percent') {
+        discountAmount = (subtotal * Number(cp.discount_value)) / 100;
+      } else {
+        discountAmount = Number(cp.discount_value);
+      }
+      discountAmount = Math.min(discountAmount, subtotal);
+    }
+  }
+
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+  const orderCode = generateOrderCode();
+  const finalOrderStatus = order_status || (payment_status === 'paid' ? 'confirmed' : 'pending');
+
+  // 5. Insert into orders
+  const [orderResult] = await connection.query(
+    `INSERT INTO orders (user_id, address_id, order_code, total_amount, order_status, payment_status)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [userId, finalAddressId, orderCode, totalAmount, finalOrderStatus, payment_status]
+  );
+  const orderId = orderResult.insertId;
+
+  // 6. Insert order items & update inventory
+  for (const it of itemsToInsert) {
+    await connection.query(
+      `INSERT INTO order_items (order_id, variant_id, product_name, variant_name, unit_price, quantity, line_total)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [orderId, it.variant_id, it.product_name, it.variant_name, it.unit_price, it.quantity, it.line_total]
+    );
+
+    // Deduct stock
+    const newStock = it.current_stock - it.quantity;
+    await connection.query('UPDATE product_variants SET stock = ? WHERE variant_id = ?', [newStock, it.variant_id]);
+
+    // Record inventory transaction
+    await connection.query(
+      `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after)
+       VALUES (?, ?, 'sale', ?, ?)`,
+      [it.variant_id, userId, -it.quantity, newStock]
+    );
+  }
+
+  // 7. Insert coupon if applied
+  if (appliedCouponId && discountAmount > 0) {
+    await connection.query(
+      'INSERT INTO order_coupons (order_id, coupon_id, discount_amount) VALUES (?, ?, ?)',
+      [orderId, appliedCouponId, discountAmount]
+    );
+    await connection.query(
+      'UPDATE coupons SET used_count = used_count + 1 WHERE coupon_id = ?',
+      [appliedCouponId]
+    );
+  }
+
+  // 8. Insert status history
+  await connection.query(
+    'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, NULL, ?)',
+    [orderId, userId, finalOrderStatus]
+  );
+
+  // 9. Insert payment record
+  const paymentRecordStatus = payment_status === 'paid' ? 'success' : 'pending';
+  await connection.query(
+    `INSERT INTO payments (order_id, payment_method, amount, payment_status, paid_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [orderId, payment_method, totalAmount, paymentRecordStatus, paid_at || (payment_status === 'paid' ? new Date() : null)]
+  );
+
+  // 10. Clear cart for the user after checkout
+  await connection.query(
+    `DELETE ci FROM cart_items ci
+     JOIN carts c ON ci.cart_id = c.cart_id
+     WHERE c.user_id = ?`,
+    [userId]
+  );
+
+  return {
+    order_id: orderId,
+    order_code: orderCode,
+    total_amount: totalAmount,
+    discount_amount: discountAmount,
+    order_status: finalOrderStatus,
+    payment_status: payment_status
+  };
+}
+
 // [POST] /api/orders
 async function createOrder(req, res, next) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    const userId = req.user.user_id;
-    const {
-      address_id,
-      recipient_name,
-      recipient_phone,
-      street_address,
-      payment_method = 'COD',
-      coupon_code,
-      items: customItems
-    } = req.body;
-
-    // 1. Resolve Address
-    let finalAddressId = address_id;
-    if (!finalAddressId) {
-      if (!recipient_name || !recipient_phone || !street_address) {
-        return errorResponse(res, 'Vui lòng cung cấp địa chỉ nhận hàng (address_id hoặc thông tin người nhận)', 400);
-      }
-      const [addrResult] = await connection.query(
-        'INSERT INTO addresses (user_id, recipient_name, recipient_phone, street_address) VALUES (?, ?, ?, ?)',
-        [userId, recipient_name, recipient_phone, street_address]
-      );
-      finalAddressId = addrResult.insertId;
-    }
-
-    // 2. Resolve Items
-    let orderItemsData = [];
-
-    if (Array.isArray(customItems) && customItems.length > 0) {
-      orderItemsData = customItems;
-    } else {
-      // Get from the user's latest cart
-      const [userCarts] = await connection.query(
-        'SELECT cart_id FROM carts WHERE user_id = ? ORDER BY cart_id DESC LIMIT 1',
-        [userId]
-      );
-      if (userCarts.length === 0) {
-        await connection.rollback();
-        return errorResponse(res, 'Giỏ hàng của bạn đang trống, không thể tạo đơn hàng', 400);
-      }
-      const cartId = userCarts[0].cart_id;
-
-      const [cartRows] = await connection.query(
-        `SELECT ci.variant_id, ci.quantity 
-         FROM cart_items ci
-         WHERE ci.cart_id = ?`,
-        [cartId]
-      );
-      if (cartRows.length === 0) {
-        await connection.rollback();
-        return errorResponse(res, 'Giỏ hàng của bạn đang trống, không thể tạo đơn hàng', 400);
-      }
-      orderItemsData = cartRows;
-    }
-
-    // Consolidate order items if any duplicate variants exist
-    const itemMap = new Map();
-    for (const item of orderItemsData) {
-      const vId = Number(item.variant_id);
-      const qty = Number(item.quantity) || 1;
-      if (!vId || qty <= 0) continue;
-      itemMap.set(vId, (itemMap.get(vId) || 0) + qty);
-    }
-
-    if (itemMap.size === 0) {
-      await connection.rollback();
-      return errorResponse(res, 'Không có sản phẩm hợp lệ trong đơn hàng để thanh toán', 400);
-    }
-
-    // 3. Validate stock & calculate subtotal
-    let subtotal = 0;
-    const itemsToInsert = [];
-
-    for (const [variantId, quantity] of itemMap.entries()) {
-      const [variantRows] = await connection.query(
-        `SELECT v.variant_id, v.variant_name, v.price, v.sale_price, v.stock, p.product_name
-         FROM product_variants v
-         JOIN products p ON v.product_id = p.product_id
-         WHERE v.variant_id = ? FOR UPDATE`,
-        [variantId]
-      );
-
-      if (variantRows.length === 0) {
-        await connection.rollback();
-        return errorResponse(res, `Sản phẩm với mã phiên bản ${variantId} không tồn tại`, 404);
-      }
-
-      const variant = variantRows[0];
-
-      if (variant.stock < quantity) {
-        await connection.rollback();
-        return errorResponse(
-          res,
-          `Sản phẩm "${variant.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho (bạn đặt ${quantity})`,
-          400
-        );
-      }
-
-      const unitPrice = variant.sale_price !== null ? Number(variant.sale_price) : Number(variant.price);
-      const lineTotal = unitPrice * quantity;
-      subtotal += lineTotal;
-
-      itemsToInsert.push({
-        variant_id: variant.variant_id,
-        product_name: variant.product_name,
-        variant_name: variant.variant_name,
-        unit_price: unitPrice,
-        quantity,
-        line_total: lineTotal,
-        current_stock: variant.stock
-      });
-    }
-
-    // 4. Handle Coupon discount
-    let discountAmount = 0;
-    let appliedCouponId = null;
-
-    if (coupon_code) {
-      const [coupons] = await connection.query(
-        'SELECT * FROM coupons WHERE coupon_code = ? LIMIT 1',
-        [coupon_code]
-      );
-      if (coupons.length > 0) {
-        const cp = coupons[0];
-        const now = new Date();
-
-        // Kiểm tra thời hạn hiệu lực của mã
-        if (cp.start_date && new Date(cp.start_date) > now) {
-          await connection.rollback();
-          return errorResponse(res, `Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(cp.start_date).toLocaleDateString('vi-VN')})`, 400);
-        }
-        if (cp.end_date && new Date(cp.end_date) < now) {
-          await connection.rollback();
-          return errorResponse(res, 'Mã giảm giá đã hết hạn sử dụng', 400);
-        }
-
-        // Kiểm tra giới hạn lượt dùng
-        if (cp.usage_limit !== null && cp.used_count >= cp.usage_limit) {
-          await connection.rollback();
-          return errorResponse(res, 'Mã giảm giá đã hết lượt sử dụng', 400);
-        }
-        appliedCouponId = cp.coupon_id;
-        if (cp.discount_type === 'percent') {
-          discountAmount = (subtotal * Number(cp.discount_value)) / 100;
-        } else {
-          discountAmount = Number(cp.discount_value);
-        }
-        discountAmount = Math.min(discountAmount, subtotal);
-      }
-    }
-
-    const totalAmount = Math.max(0, subtotal - discountAmount);
-    const orderCode = generateOrderCode();
-
-    // 5. Insert into orders
-    const [orderResult] = await connection.query(
-      `INSERT INTO orders (user_id, address_id, order_code, total_amount, order_status, payment_status)
-       VALUES (?, ?, ?, ?, 'pending', 'unpaid')`,
-      [userId, finalAddressId, orderCode, totalAmount]
-    );
-    const orderId = orderResult.insertId;
-
-    // 6. Insert order items & update inventory
-    for (const it of itemsToInsert) {
-      await connection.query(
-        `INSERT INTO order_items (order_id, variant_id, product_name, variant_name, unit_price, quantity, line_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [orderId, it.variant_id, it.product_name, it.variant_name, it.unit_price, it.quantity, it.line_total]
-      );
-
-      // Deduct stock
-      const newStock = it.current_stock - it.quantity;
-      await connection.query('UPDATE product_variants SET stock = ? WHERE variant_id = ?', [newStock, it.variant_id]);
-
-      // Record inventory transaction
-      await connection.query(
-        `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after)
-         VALUES (?, ?, 'sale', ?, ?)`,
-        [it.variant_id, userId, -it.quantity, newStock]
-      );
-    }
-
-    // 7. Insert coupon if applied
-    if (appliedCouponId && discountAmount > 0) {
-      await connection.query(
-        'INSERT INTO order_coupons (order_id, coupon_id, discount_amount) VALUES (?, ?, ?)',
-        [orderId, appliedCouponId, discountAmount]
-      );
-      // Tăng số lượt đã dùng
-      await connection.query(
-        'UPDATE coupons SET used_count = used_count + 1 WHERE coupon_id = ?',
-        [appliedCouponId]
-      );
-    }
-
-    // 8. Insert status history
-    await connection.query(
-      'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, NULL, "pending")',
-      [orderId, userId]
-    );
-
-    // 9. Insert payment record
-    await connection.query(
-      `INSERT INTO payments (order_id, payment_method, amount, payment_status)
-       VALUES (?, ?, ?, 'pending')`,
-      [orderId, payment_method, totalAmount]
-    );
-
-    // 10. Always clear cart for the user after checkout
-    await connection.query(
-      `DELETE ci FROM cart_items ci
-       JOIN carts c ON ci.cart_id = c.cart_id
-       WHERE c.user_id = ?`,
-      [userId]
-    );
+    const orderData = await executeOrderCreation(connection, {
+      userId: req.user.user_id,
+      address_id: req.body.address_id,
+      recipient_name: req.body.recipient_name,
+      recipient_phone: req.body.recipient_phone,
+      street_address: req.body.street_address,
+      payment_method: req.body.payment_method || 'COD',
+      coupon_code: req.body.coupon_code,
+      items: req.body.items,
+      payment_status: 'unpaid'
+    });
 
     await connection.commit();
 
     return successResponse(
       res,
-      {
-        order_id: orderId,
-        order_code: orderCode,
-        total_amount: totalAmount,
-        discount_amount: discountAmount,
-        order_status: 'pending',
-        payment_status: 'unpaid'
-      },
+      orderData,
       'Đặt hàng thành công',
       201
     );
@@ -588,6 +613,7 @@ async function cancelOrder(req, res, next) {
 
 module.exports = {
   createOrder,
+  executeOrderCreation,
   getUserOrders,
   getOrderDetail,
   getAllOrders,

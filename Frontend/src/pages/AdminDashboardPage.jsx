@@ -317,10 +317,13 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   };
 
   const handleDeleteCoupon = async (id) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa mã giảm giá này?')) {
+      return;
+    }
     try {
       const res = await couponApi.deleteCoupon(id);
       if (res.success) {
-        toast.info('Đã xóa mã voucher');
+        toast.success(res.message || 'Đã xóa mã voucher thành công');
         fetchCoupons();
       }
     } catch (err) {

@@ -19,6 +19,7 @@ import { MyOrdersPage } from './pages/MyOrdersPage';
 import { WishlistPage } from './pages/WishlistPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { VNPayReturnPage } from './pages/VNPayReturnPage';
 
 // APIs
 import { productApi } from './api/productApi';
@@ -27,29 +28,44 @@ import Box from '@mui/material/Box';
 
 // Helper to parse route path and query parameters from hash or path string
 const parseRoute = (path) => {
-  const cleanPath = (path || '').replace(/^#\/?/, '').trim();
-  if (!cleanPath) {
-    return { route: 'home', params: {} };
+  let cleanPath = (path || '').replace(/^#\/?/, '').trim();
+  let queryString = '';
+
+  // If path is empty, check pathname and search (e.g. from redirect to /vnpay_return)
+  if (!cleanPath && typeof window !== 'undefined' && window.location.pathname && window.location.pathname !== '/') {
+    cleanPath = window.location.pathname.replace(/^\//, '');
+    queryString = (window.location.search || '').replace(/^\?/, '');
+  } else if (cleanPath.includes('?')) {
+    const parts = cleanPath.split('?');
+    cleanPath = parts[0];
+    queryString = parts[1];
   }
 
-  const [routePath, queryString] = cleanPath.split('?');
-  const queryParams = new URLSearchParams(queryString || '');
+  // Also include window.location.search parameters if present
+  const combinedSearch = new URLSearchParams(queryString);
+  if (typeof window !== 'undefined' && window.location.search) {
+    const globalParams = new URLSearchParams(window.location.search);
+    globalParams.forEach((val, key) => combinedSearch.set(key, val));
+  }
+
   const params = {};
-  queryParams.forEach((val, key) => {
+  combinedSearch.forEach((val, key) => {
     params[key] = val;
   });
 
-  if (routePath.startsWith('product/')) {
-    const slug = routePath.replace(/^product\//, '');
+  if (cleanPath.startsWith('product/')) {
+    const slug = cleanPath.replace(/^product\//, '');
     return { route: 'product-detail', params: { slug, ...params } };
-  } else if (routePath.startsWith('order-success/')) {
-    const code = routePath.replace(/^order-success\//, '');
+  } else if (cleanPath.startsWith('order-success/')) {
+    const code = cleanPath.replace(/^order-success\//, '');
     return { route: 'order-success', params: { orderCode: code, ...params } };
-  } else if (routePath.startsWith('admin')) {
+  } else if (cleanPath.startsWith('vnpay_return') || cleanPath.startsWith('vnpay-return')) {
+    return { route: 'vnpay-return', params };
+  } else if (cleanPath.startsWith('admin')) {
     return { route: 'admin', params };
   }
 
-  return { route: routePath || 'home', params };
+  return { route: cleanPath || 'home', params };
 };
 
 function AppContent() {
@@ -190,6 +206,13 @@ function AppContent() {
           <OrderSuccessPage
             orderCode={routeParams.orderCode}
             orderData={lastOrderData}
+            onNavigate={navigate}
+          />
+        )}
+
+        {currentRoute === 'vnpay-return' && (
+          <VNPayReturnPage
+            params={routeParams}
             onNavigate={navigate}
           />
         )}
