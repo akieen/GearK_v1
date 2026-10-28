@@ -14,6 +14,12 @@ import { AppDialog } from '../ui/AppDialog';
 import { AppInput } from '../ui/AppInput';
 import { AppButton } from '../ui/AppButton';
 
+const QUICK_ROLES = [
+  { role: 'customer', label: 'Khách hàng', variant: 'soft' },
+  { role: 'staff', label: 'Nhân viên', variant: 'secondary' },
+  { role: 'admin', label: 'Quản trị', variant: 'primary' },
+];
+
 export const AuthModal = () => {
   const {
     authModalOpen,
@@ -25,19 +31,20 @@ export const AuthModal = () => {
     quickLogin,
   } = useAuth();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [form, setForm] = useState({ fullName: '', email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
+
+  const isLogin = authModalMode === 'login';
+  const handleChange = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (authModalMode === 'login') {
-        await login(email, password);
+      if (isLogin) {
+        await login(form.email, form.password);
       } else {
-        await register(fullName, email, password);
+        await register(form.fullName, form.email, form.password);
       }
     } finally {
       setSubmitting(false);
@@ -57,11 +64,12 @@ export const AuthModal = () => {
     <AppDialog
       open={authModalOpen}
       onClose={closeAuthModal}
-      maxWidth={460}
-      title={authModalMode === 'login' ? 'Đăng Nhập Tài Khoản' : 'Đăng Ký Tài Khoản Mới'}
+      maxWidth="xs" // SỬA TẠI ĐÂY: Dùng "xs" (~444px) chuẩn của MUI để thu gọn khung trắng ngoài cùng
+      PaperProps={{ sx: { maxWidth: 440, width: '100%' } }} // Dự phòng nếu AppDialog có nhận PaperProps
+      sx={{ '& .MuiDialog-paper': { maxWidth: 440, width: '100%' } }} // Ép cứng khung trắng chỉ rộng 440px
+      title={isLogin ? 'Đăng Nhập Tài Khoản' : 'Đăng Ký Tài Khoản'}
       headerIcon={<LockOutlinedIcon />}
     >
-      {/* Tabs */}
       <Tabs
         value={authModalMode}
         onChange={(e, val) => setAuthModalMode(val)}
@@ -69,27 +77,22 @@ export const AuthModal = () => {
         textColor="primary"
         indicatorColor="primary"
         sx={{
-          mb: 3,
+          mb: 2.5,
           borderBottom: '1px solid #E5E7EB',
-          '& .MuiTab-root': {
-            fontWeight: 700,
-            fontSize: '0.9375rem',
-            textTransform: 'none',
-          },
+          '& .MuiTab-root': { fontWeight: 700, textTransform: 'none' },
         }}
       >
         <Tab value="login" label="Đăng nhập" />
-        <Tab value="register" label="Đăng ký tài khoản" />
+        <Tab value="register" label="Đăng ký" />
       </Tabs>
 
-      {/* Form */}
       <Box component="form" onSubmit={handleSubmit}>
-        {authModalMode === 'register' && (
+        {!isLogin && (
           <AppInput
-            topLabel="Họ và tên của bạn"
+            topLabel="Họ và tên"
             placeholder="Ví dụ: Nguyễn Văn Khách"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            value={form.fullName}
+            onChange={handleChange('fullName')}
             required
             startAdornment={<PersonOutlineIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
           />
@@ -99,8 +102,8 @@ export const AuthModal = () => {
           topLabel="Địa chỉ Email"
           type="email"
           placeholder="name@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          value={form.email}
+          onChange={handleChange('email')}
           required
           startAdornment={<MailOutlineIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
         />
@@ -109,61 +112,37 @@ export const AuthModal = () => {
           topLabel="Mật khẩu"
           type="password"
           placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          value={form.password}
+          onChange={handleChange('password')}
           required
           startAdornment={<LockOutlinedIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
           sx={{ mb: 2.5 }}
         />
 
-        <AppButton
-          type="submit"
-          variant="primary"
-          fullWidth
-          size="large"
-          loading={submitting}
-          glow
-          sx={{ mb: 2.5 }}
-        >
-          {authModalMode === 'login' ? 'Đăng nhập ngay' : 'Tạo tài khoản'}
+        <AppButton type="submit" variant="primary" fullWidth size="large" loading={submitting} glow>
+          {isLogin ? 'Đăng nhập ngay' : 'Tạo tài khoản'}
         </AppButton>
       </Box>
 
-      {/* Quick Test Login */}
-      <Divider sx={{ my: 2 }}>
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 600, px: 1 }}>
-          HOẶC ĐĂNG NHẬP NHANH (TEST DEMO)
+      <Divider sx={{ my: 2.5 }}>
+        <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 600 }}>
+          ĐĂNG NHẬP NHANH (DEMO)
         </Typography>
       </Divider>
 
-      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-        <AppButton
-          variant="soft"
-          size="small"
-          fullWidth
-          onClick={() => handleQuick('customer')}
-          disabled={submitting}
-        >
-          Khách hàng
-        </AppButton>
-        <AppButton
-          variant="secondary"
-          size="small"
-          fullWidth
-          onClick={() => handleQuick('staff')}
-          disabled={submitting}
-        >
-          Nhân viên
-        </AppButton>
-        <AppButton
-          variant="primary"
-          size="small"
-          fullWidth
-          onClick={() => handleQuick('admin')}
-          disabled={submitting}
-        >
-          Quản trị viên
-        </AppButton>
+      <Stack direction="row" spacing={1}>
+        {QUICK_ROLES.map(({ role, label, variant }) => (
+          <AppButton
+            key={role}
+            variant={variant}
+            size="small"
+            fullWidth
+            disabled={submitting}
+            onClick={() => handleQuick(role)}
+          >
+            {label}
+          </AppButton>
+        ))}
       </Stack>
     </AppDialog>
   );
