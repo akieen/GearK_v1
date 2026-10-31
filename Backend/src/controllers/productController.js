@@ -285,7 +285,7 @@ async function createProduct(req, res, next) {
       brand_id,
       description,
       thumbnail_url,
-      status = 'draft',
+      status = 'active',
       variants = [],
       images = [],
     } = req.body;

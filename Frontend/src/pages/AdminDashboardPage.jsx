@@ -277,6 +277,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
         brand_id: parseInt(newProdBrandId),
         product_name: newProdName.trim(),
         description: newProdDesc.trim(),
+        status: 'active',
         thumbnail_url: newProdThumb.trim() || newProdImages[0] || newVariantImages[0] || defaultThumb,
         images: newProdImages,
         variants: [{

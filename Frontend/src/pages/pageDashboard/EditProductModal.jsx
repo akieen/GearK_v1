@@ -11,10 +11,50 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import Chip from '@mui/material/Chip';
 
 import CloseIcon from '@mui/icons-material/Close';
 
 import ImageUploadField from '../../components/common/ImageUploadField';
+
+const STATUS_OPTIONS = [
+  {
+    value: 'active',
+    label: 'Đang kinh doanh',
+    desc: 'Hiển thị công khai cho khách hàng mua sắm',
+    color: '#059669',
+    bg: '#ECFDF5',
+    border: '#A7F3D0',
+    dot: '#10B981',
+  },
+  {
+    value: 'draft',
+    label: 'Bản nháp',
+    desc: 'Đang soạn thảo nội dung, chưa hiển thị ra ngoài web',
+    color: '#2563EB',
+    bg: '#EFF6FF',
+    border: '#BFDBFE',
+    dot: '#3B82F6',
+  },
+  {
+    value: 'inactive',
+    label: 'Tạm ngưng bán',
+    desc: 'Tạm ẩn khỏi trang chủ và danh sách tìm kiếm',
+    color: '#D97706',
+    bg: '#FEF3C7',
+    border: '#FDE68A',
+    dot: '#F59E0B',
+  },
+  {
+    value: 'archived',
+    label: 'Lưu trữ / Đã ngưng',
+    desc: 'Ngừng kinh doanh hoàn toàn (Lưu trữ lịch sử)',
+    color: '#4B5563',
+    bg: '#F3F4F6',
+    border: '#E5E7EB',
+    dot: '#9CA3AF',
+  },
+];
 
 export default function EditProductModal({
   editingProduct,
@@ -40,9 +80,14 @@ export default function EditProductModal({
       setBrandId(editingProduct.brand_id ? String(editingProduct.brand_id) : '');
       setDescription(editingProduct.description || '');
       setThumbnailUrl(editingProduct.thumbnail_url || '');
-      setStatus(editingProduct.status || 'active');
+
+      const rawStatus = editingProduct.status ? String(editingProduct.status).toLowerCase().trim() : 'active';
+      const validStatus = STATUS_OPTIONS.some((opt) => opt.value === rawStatus) ? rawStatus : 'active';
+      setStatus(validStatus);
     }
   }, [editingProduct]);
+
+  const currentStatusConfig = STATUS_OPTIONS.find((opt) => opt.value === status) || STATUS_OPTIONS[0];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -70,7 +115,21 @@ export default function EditProductModal({
             {Icons?.Edit && <Icons.Edit size={18} />}
           </Box>
           <Box>
-            <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Chỉnh sửa thông tin sản phẩm</Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Chỉnh sửa thông tin sản phẩm</Typography>
+              <Chip
+                size="small"
+                label={currentStatusConfig.label}
+                sx={{
+                  bgcolor: currentStatusConfig.bg,
+                  color: currentStatusConfig.color,
+                  border: `1px solid ${currentStatusConfig.border}`,
+                  fontWeight: 700,
+                  fontSize: 11,
+                  height: 22,
+                }}
+              />
+            </Stack>
             <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
               ID: #{editingProduct?.product_id} • {editingProduct?.product_name}
             </Typography>
@@ -103,12 +162,62 @@ export default function EditProductModal({
             </Box>
           </Box>
 
-          <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Trạng thái kinh doanh</Typography>
-            <Select fullWidth size="small" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <MenuItem value="active">Đang kinh doanh (Hiển thị cho khách)</MenuItem>
-              <MenuItem value="inactive">Tạm ngưng bán (Ẩn khỏi trang chủ)</MenuItem>
-              <MenuItem value="archived">Lưu trữ / Đã ngừng kinh doanh</MenuItem>
+          {/* TRẠNG THÁI KINH DOANH SẢN PHẨM */}
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: currentStatusConfig.bg, border: `1px solid ${currentStatusConfig.border}` }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: currentStatusConfig.color, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: currentStatusConfig.dot }} />
+                Trạng thái kinh doanh sản phẩm *
+              </Typography>
+              <Chip
+                size="small"
+                label={currentStatusConfig.label}
+                sx={{
+                  bgcolor: '#FFFFFF',
+                  color: currentStatusConfig.color,
+                  border: `1px solid ${currentStatusConfig.border}`,
+                  fontWeight: 700,
+                  fontSize: 11,
+                  height: 20,
+                }}
+              />
+            </Stack>
+            <Select
+              fullWidth
+              size="small"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              sx={{ bgcolor: '#FFFFFF' }}
+              renderValue={(selectedVal) => {
+                const opt = STATUS_OPTIONS.find((o) => o.value === selectedVal) || STATUS_OPTIONS[0];
+                return (
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: opt.dot }} />
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: opt.color }}>
+                      {opt.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                      — {opt.desc}
+                    </Typography>
+                  </Stack>
+                );
+              }}
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value} sx={{ py: 1 }}>
+                  <Stack spacing={0.25} sx={{ width: '100%' }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: opt.dot }} />
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: opt.color }}>
+                        {opt.label}
+                      </Typography>
+                    </Stack>
+                    <Typography sx={{ fontSize: 11.5, color: 'text.secondary', pl: 2 }}>
+                      {opt.desc}
+                    </Typography>
+                  </Stack>
+                </MenuItem>
+              ))}
             </Select>
           </Box>
 
