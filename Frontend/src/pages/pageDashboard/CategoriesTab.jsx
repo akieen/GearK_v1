@@ -1,4 +1,24 @@
 import React, { useState } from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+
+import AddIcon from '@mui/icons-material/Add';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+
 import { categoryApi } from '../../api/categoryApi';
 import { useToast } from '../../context/ToastContext';
 
@@ -10,17 +30,13 @@ export default function CategoriesTab({ categories, fetchCategories, isAdmin, Ic
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!newCatName.trim()) {
-      toast.warning('Vui lòng nhập tên danh mục');
-      return;
-    }
+    if (!newCatName.trim()) return toast.warning('Vui lòng nhập tên danh mục');
     setSubmitting(true);
     try {
-      const payload = {
+      const res = await categoryApi.createCategory({
         category_name: newCatName.trim(),
         parent_id: newParentId ? parseInt(newParentId) : null,
-      };
-      const res = await categoryApi.createCategory(payload);
+      });
       if (res.success) {
         toast.success(`Đã thêm danh mục "${newCatName.trim()}"!`);
         setNewCatName('');
@@ -48,147 +64,94 @@ export default function CategoriesTab({ categories, fetchCategories, isAdmin, Ic
   };
 
   return (
-    <div>
-      {/* Create Category Card */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 8,
-          padding: 20,
-          border: '1px solid var(--border-light)',
-          marginBottom: 20,
-        }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icons.Folder size={18} style={{ color: 'var(--primary)' }} />
-          Thêm danh mục sản phẩm mới
-        </h3>
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label className="form-label">Tên danh mục *</label>
-            <input
-              type="text"
+    <Box>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: 2, border: '1px solid #E5E7EB' }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          {Icons?.Folder && <Icons.Folder size={18} style={{ color: '#E30019' }} />}
+          <Typography sx={{ fontSize: 15, fontWeight: 800 }}>Thêm danh mục sản phẩm mới</Typography>
+        </Stack>
+
+        <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Tên danh mục *</Typography>
+            <TextField
+              fullWidth
+              size="small"
               required
-              className="form-input"
               placeholder="VD: Màn hình Gaming, Ghế công thái học..."
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
             />
-          </div>
+          </Box>
 
-          <div style={{ width: 220 }}>
-            <label className="form-label">Danh mục cha (Tùy chọn)</label>
-            <select
-              className="form-input"
-              value={newParentId}
-              onChange={(e) => setNewParentId(e.target.value)}
-            >
-              <option value="">-- Là danh mục gốc --</option>
-              {categories
-                .filter((c) => !c.parent_id)
-                .map((c) => (
-                  <option key={c.category_id} value={c.category_id}>
-                    {c.category_name}
-                  </option>
-                ))}
-            </select>
-          </div>
+          <Box sx={{ width: 220 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Danh mục cha (Tùy chọn)</Typography>
+            <Select fullWidth size="small" displayEmpty value={newParentId} onChange={(e) => setNewParentId(e.target.value)}>
+              <MenuItem value="">-- Là danh mục gốc --</MenuItem>
+              {categories.filter((c) => !c.parent_id).map((c) => (
+                <MenuItem key={c.category_id} value={c.category_id}>{c.category_name}</MenuItem>
+              ))}
+            </Select>
+          </Box>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{
-              backgroundColor: 'var(--primary)',
-              color: '#FFFFFF',
-              padding: '10px 20px',
-              borderRadius: 6,
-              fontWeight: 700,
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <Icons.Plus size={16} />
+          <Button type="submit" variant="contained" disabled={submitting} startIcon={<AddIcon />} sx={{ height: 40 }}>
             {submitting ? 'Đang tạo...' : 'Thêm danh mục'}
-          </button>
-        </form>
-      </div>
+          </Button>
+        </Box>
+      </Paper>
 
-      {/* Categories Table */}
-      <div className="data-table-card">
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>
-            Danh sách danh mục ({categories.length})
-          </div>
-          <button
-            onClick={fetchCategories}
-            style={{ fontSize: 12.5, color: 'var(--primary)', fontWeight: 700 }}
-          >
-            Làm mới
-          </button>
-        </div>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB' }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 15 }}>Danh sách danh mục ({categories.length})</Typography>
+          <Button size="small" onClick={fetchCategories} sx={{ fontSize: 12.5, fontWeight: 700 }}>Làm mới</Button>
+        </Stack>
 
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Tên danh mục</th>
-              <th>Slug / Đường dẫn</th>
-              <th>Danh mục cha</th>
-              <th>Số sản phẩm</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>ID</TableCell>
+              <TableCell>Tên danh mục</TableCell>
+              <TableCell>Slug / Đường dẫn</TableCell>
+              <TableCell>Danh mục cha</TableCell>
+              <TableCell>Số sản phẩm</TableCell>
+              <TableCell>Thao tác</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {categories.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
-                  Chưa có danh mục nào
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có danh mục nào</TableCell>
+              </TableRow>
             ) : (
               categories.map((cat) => {
                 const parent = categories.find((c) => c.category_id === cat.parent_id);
                 return (
-                  <tr key={cat.category_id}>
-                    <td style={{ fontWeight: 700, color: '#6B7280' }}>#{cat.category_id}</td>
-                    <td style={{ fontWeight: 800, color: '#111827' }}>
-                      {cat.category_name}
-                    </td>
-                    <td style={{ fontSize: 12, color: '#6B7280', fontFamily: 'monospace' }}>
-                      /{cat.slug}
-                    </td>
-                    <td>
+                  <TableRow key={cat.category_id} hover>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary', py: 1.5 }}>#{cat.category_id}</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{cat.category_name}</TableCell>
+                    <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontFamily: 'monospace' }}>/{cat.slug}</TableCell>
+                    <TableCell>
                       {parent ? (
-                        <span style={{ fontSize: 12, backgroundColor: '#F3F4F6', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                          {parent.category_name}
-                        </span>
+                        <Chip label={parent.category_name} size="small" sx={{ fontSize: 12, bgcolor: '#F3F4F6' }} />
                       ) : (
-                        <span style={{ fontSize: 12, color: '#9CA3AF' }}>Gốc</span>
+                        <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>Gốc</Typography>
                       )}
-                    </td>
-                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                      {cat.product_count ?? 0}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{cat.product_count ?? 0}</TableCell>
+                    <TableCell>
                       {isAdmin && (
-                        <button
-                          onClick={() => handleDelete(cat.category_id, cat.category_name)}
-                          style={{ color: '#EF4444', padding: 4 }}
-                          title="Xóa danh mục"
-                        >
-                          <Icons.Trash2 size={16} />
-                        </button>
+                        <IconButton size="small" color="error" onClick={() => handleDelete(cat.category_id, cat.category_name)}>
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 }

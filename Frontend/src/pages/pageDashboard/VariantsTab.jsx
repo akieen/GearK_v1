@@ -1,16 +1,77 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { productApi, uploadApi } from '../../api/productApi';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import CircularProgress from '@mui/material/CircularProgress';
+
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+
+import { productApi } from '../../api/productApi';
 import { useToast } from '../../context/ToastContext';
 import ImageUploadField from '../../components/common/ImageUploadField';
 import { generateSku } from '../../utils/formatters';
 
-export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onNavigate, targetProductId }) {
+const PRESETS = {
+  mouse: [
+    { key: 'Màu sắc', value: 'Đen' },
+    { key: 'Cảm biến', value: 'Quang học Focus Pro 35K' },
+    { key: 'DPI tối đa', value: '35.000 DPI' },
+    { key: 'Kết nối', value: 'Không dây 2.4GHz / Type-C' },
+    { key: 'Trọng lượng', value: '54g' },
+    { key: 'Thời lượng pin', value: '95 giờ' },
+  ],
+  keyboard: [
+    { key: 'Màu sắc', value: 'Đen' },
+    { key: 'Loại Switch', value: 'ROG RX Red Linear' },
+    { key: 'Layout', value: 'TKL 87 phím' },
+    { key: 'Kết nối', value: 'Có dây Type-C tháo rời' },
+    { key: 'Đèn LED', value: 'RGB Aura Sync 16.8 triệu màu' },
+    { key: 'Keycap', value: 'PBT Doubleshot' },
+  ],
+  headphone: [
+    { key: 'Màu sắc', value: 'Đen' },
+    { key: 'Kiểu kết nối', value: 'Wireless 2.4GHz / Bluetooth 5.3' },
+    { key: 'Đường kính Driver', value: '50mm Neodymium' },
+    { key: 'Microphone', value: 'Tháo rời, chống ồn đa hướng' },
+    { key: 'Thời lượng pin', value: '50 giờ' },
+  ],
+  monitor: [
+    { key: 'Kích thước', value: '27 inch' },
+    { key: 'Độ phân giải', value: '2K QHD (2560 x 1440)' },
+    { key: 'Tần số quét', value: '180Hz' },
+    { key: 'Tấm nền', value: 'Fast IPS' },
+    { key: 'Thời gian phản hồi', value: '1ms GTG' },
+    { key: 'Cổng kết nối', value: '2x HDMI 2.0, 1x DisplayPort 1.4' },
+  ],
+};
+
+export default function VariantsTab({ products, formatPrice, isAdmin, Icons, targetProductId }) {
   const toast = useToast();
   const [selectedProductId, setSelectedProductId] = useState(targetProductId || '');
   const [productDetail, setProductDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  // Form add variant
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSku, setNewSku] = useState('');
   const [skuManuallyEdited, setSkuManuallyEdited] = useState(false);
@@ -26,30 +87,12 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   const [newVariantImages, setNewVariantImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Auto-generate SKU when variant name changes or form opens
-  useEffect(() => {
-    if (!skuManuallyEdited && showAddForm) {
-      const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
-      if (prodName || newVariantName) {
-        setNewSku(generateSku(prodName, newVariantName));
-      }
-    }
-  }, [newVariantName, showAddForm, skuManuallyEdited, productDetail, selectedProductId, products]);
-
-  const handleRegenerateSku = () => {
-    const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
-    setNewSku(generateSku(prodName, newVariantName));
-    setSkuManuallyEdited(false);
-  };
-
-  // Managing Variant Images Modal
   const [managingVariantImages, setManagingVariantImages] = useState(null);
   const [uploadingVariantImg, setUploadingVariantImg] = useState(false);
   const variantFileInputRef = useRef(null);
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [showAddUrlInput, setShowAddUrlInput] = useState(false);
 
-  // Quick edit variant modal/state
   const [editingVariant, setEditingVariant] = useState(null);
   const [editVariantName, setEditVariantName] = useState('');
   const [editPrice, setEditPrice] = useState('');
@@ -59,78 +102,35 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   const [editSpecsList, setEditSpecsList] = useState([]);
   const [updating, setUpdating] = useState(false);
 
-  // Quick Presets for specifications
-  const presets = {
-    mouse: [
-      { key: 'Màu sắc', value: 'Đen' },
-      { key: 'Cảm biến', value: 'Quang học Focus Pro 35K' },
-      { key: 'DPI tối đa', value: '35.000 DPI' },
-      { key: 'Kết nối', value: 'Không dây 2.4GHz / Type-C' },
-      { key: 'Trọng lượng', value: '54g' },
-      { key: 'Thời lượng pin', value: '95 giờ' },
-    ],
-    keyboard: [
-      { key: 'Màu sắc', value: 'Đen' },
-      { key: 'Loại Switch', value: 'ROG RX Red Linear' },
-      { key: 'Layout', value: 'TKL 87 phím' },
-      { key: 'Kết nối', value: 'Có dây Type-C tháo rời' },
-      { key: 'Đèn LED', value: 'RGB Aura Sync 16.8 triệu màu' },
-      { key: 'Keycap', value: 'PBT Doubleshot' },
-    ],
-    headphone: [
-      { key: 'Màu sắc', value: 'Đen' },
-      { key: 'Kiểu kết nối', value: 'Wireless 2.4GHz / Bluetooth 5.3' },
-      { key: 'Đường kính Driver', value: '50mm Neodymium' },
-      { key: 'Microphone', value: 'Tháo rời, chống ồn đa hướng' },
-      { key: 'Thời lượng pin', value: '50 giờ' },
-    ],
-    monitor: [
-      { key: 'Kích thước', value: '27 inch' },
-      { key: 'Độ phân giải', value: '2K QHD (2560 x 1440)' },
-      { key: 'Tần số quét', value: '180Hz' },
-      { key: 'Tấm nền', value: 'Fast IPS' },
-      { key: 'Thời gian phản hồi', value: '1ms GTG' },
-      { key: 'Cổng kết nối', value: '2x HDMI 2.0, 1x DisplayPort 1.4' },
-    ],
-  };
-
-  const addSpecRow = (setter) => {
-    setter((prev) => [...prev, { key: '', value: '' }]);
-  };
-
-  const removeSpecRow = (setter, idx) => {
-    setter((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const updateSpecRow = (setter, idx, field, val) => {
-    setter((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, [field]: val } : item))
-    );
-  };
-
-  const applyPreset = (setter, type) => {
-    if (presets[type]) {
-      setter(presets[type].map((item) => ({ ...item })));
+  useEffect(() => {
+    if (!skuManuallyEdited && showAddForm) {
+      const prodName = productDetail?.product_name || products?.find((p) => p.product_id === parseInt(selectedProductId, 10))?.product_name || '';
+      if (prodName || newVariantName) setNewSku(generateSku(prodName, newVariantName));
     }
+  }, [newVariantName, showAddForm, skuManuallyEdited, productDetail, selectedProductId, products]);
+
+  const handleRegenerateSku = () => {
+    const prodName = productDetail?.product_name || products?.find((p) => p.product_id === parseInt(selectedProductId, 10))?.product_name || '';
+    setNewSku(generateSku(prodName, newVariantName));
+    setSkuManuallyEdited(false);
   };
+
+  const addSpecRow = (setter) => setter((prev) => [...prev, { key: '', value: '' }]);
+  const removeSpecRow = (setter, idx) => setter((prev) => prev.filter((_, i) => i !== idx));
+  const updateSpecRow = (setter, idx, field, val) => setter((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: val } : item)));
+  const applyPreset = (setter, type) => PRESETS[type] && setter(PRESETS[type].map((item) => ({ ...item })));
 
   const parseSpecsToObj = (list) => {
     const obj = {};
     list.forEach((item) => {
-      if (item.key && item.key.trim()) {
-        obj[item.key.trim()] = item.value ? item.value.trim() : '';
-      }
+      if (item.key?.trim()) obj[item.key.trim()] = item.value ? item.value.trim() : '';
     });
     return Object.keys(obj).length > 0 ? obj : null;
   };
 
-  // Auto select first product if available or update when targetProductId changes
   useEffect(() => {
-    if (targetProductId) {
-      setSelectedProductId(targetProductId);
-    } else if (products.length > 0 && !selectedProductId) {
-      setSelectedProductId(products[0].product_id);
-    }
+    if (targetProductId) setSelectedProductId(targetProductId);
+    else if (products.length > 0 && !selectedProductId) setSelectedProductId(products[0].product_id);
   }, [products, selectedProductId, targetProductId]);
 
   const fetchVariants = useCallback(async (prodId) => {
@@ -140,6 +140,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
       const res = await productApi.getProductById(prodId);
       if (res.success && res.data) {
         setProductDetail(res.data);
+        return res.data;
       }
     } catch (err) {
       toast.error(err.message || 'Lỗi tải biến thể sản phẩm');
@@ -149,24 +150,23 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   }, [toast]);
 
   useEffect(() => {
-    if (selectedProductId) {
-      fetchVariants(selectedProductId);
-    }
+    if (selectedProductId) fetchVariants(selectedProductId);
   }, [selectedProductId, fetchVariants]);
+
+  const refreshManagedVariant = async (variantId) => {
+    const data = await fetchVariants(selectedProductId);
+    const updated = data?.variants?.find((v) => v.variant_id === variantId);
+    if (updated) setManagingVariantImages(updated);
+  };
 
   const handleCreateVariant = async (e) => {
     e.preventDefault();
-    if (!newVariantName.trim() || !newPrice) {
-      toast.warning('Vui lòng nhập tên biến thể và giá bán');
-      return;
-    }
-
+    if (!newVariantName.trim() || !newPrice) return toast.warning('Vui lòng nhập tên biến thể và giá bán');
     setSubmitting(true);
     try {
-      const prodName = productDetail?.product_name || (Array.isArray(products) && products.find(p => p.product_id === parseInt(selectedProductId, 10))?.product_name) || '';
+      const prodName = productDetail?.product_name || products?.find((p) => p.product_id === parseInt(selectedProductId, 10))?.product_name || '';
       const finalSku = (newSku.trim() || generateSku(prodName, newVariantName)).toUpperCase();
-
-      const payload = {
+      const res = await productApi.addVariant(selectedProductId, {
         sku: finalSku,
         variant_name: newVariantName.trim(),
         price: parseFloat(newPrice),
@@ -175,23 +175,12 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
         warranty_months: parseInt(newWarranty) || 12,
         specifications: parseSpecsToObj(newSpecsList),
         images: newVariantImages,
-      };
-
-      const res = await productApi.addVariant(selectedProductId, payload);
+      });
       if (res.success) {
         toast.success(`Đã thêm biến thể "${newVariantName.trim()}" kèm danh sách ảnh!`);
-        setNewSku('');
-        setSkuManuallyEdited(false);
-        setNewVariantName('');
-        setNewPrice('');
-        setNewSalePrice('');
-        setNewStock('10');
-        setNewSpecsList([
-          { key: 'Màu sắc', value: '' },
-          { key: 'Bảo hành', value: '24 tháng' },
-        ]);
-        setNewVariantImages([]);
-        setShowAddForm(false);
+        setNewSku(''); setSkuManuallyEdited(false); setNewVariantName(''); setNewPrice(''); setNewSalePrice('');
+        setNewStock('10'); setNewSpecsList([{ key: 'Màu sắc', value: '' }, { key: 'Bảo hành', value: '24 tháng' }]);
+        setNewVariantImages([]); setShowAddForm(false);
         fetchVariants(selectedProductId);
       }
     } catch (err) {
@@ -201,21 +190,15 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
     }
   };
 
-  // Variant Image Management Actions
   const handleAddImagesToVariant = async (files) => {
-    if (!managingVariantImages || !files || files.length === 0) return;
+    if (!managingVariantImages || !files?.length) return;
     setUploadingVariantImg(true);
     try {
       for (let i = 0; i < files.length; i++) {
         await productApi.addVariantImage(managingVariantImages.variant_id, files[i]);
       }
       toast.success(`Đã thêm ${files.length} ảnh cho biến thể thành công!`);
-      await fetchVariants(selectedProductId);
-      const res = await productApi.getProductById(selectedProductId);
-      if (res.success && res.data) {
-        const updated = res.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
-        if (updated) setManagingVariantImages(updated);
-      }
+      await refreshManagedVariant(managingVariantImages.variant_id);
     } catch (err) {
       toast.error(err.message || 'Lỗi khi tải ảnh biến thể lên bằng Multer');
     } finally {
@@ -233,12 +216,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
       toast.success('Đã thêm ảnh cho biến thể thành công!');
       setCustomImageUrl('');
       setShowAddUrlInput(false);
-      await fetchVariants(selectedProductId);
-      const res = await productApi.getProductById(selectedProductId);
-      if (res.success && res.data) {
-        const updated = res.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
-        if (updated) setManagingVariantImages(updated);
-      }
+      await refreshManagedVariant(managingVariantImages.variant_id);
     } catch (err) {
       toast.error(err.message || 'Lỗi thêm ảnh biến thể');
     } finally {
@@ -251,14 +229,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
       const res = await productApi.setPrimaryVariantImage(imageId);
       if (res.success) {
         toast.success('Đã đặt làm ảnh chính của biến thể!');
-        await fetchVariants(selectedProductId);
-        if (managingVariantImages) {
-          const vRes = await productApi.getProductById(selectedProductId);
-          if (vRes.success && vRes.data) {
-            const updated = vRes.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
-            if (updated) setManagingVariantImages(updated);
-          }
-        }
+        if (managingVariantImages) await refreshManagedVariant(managingVariantImages.variant_id);
       }
     } catch (err) {
       toast.error(err.message || 'Lỗi đặt ảnh chính');
@@ -271,14 +242,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
       const res = await productApi.deleteVariantImage(imageId);
       if (res.success) {
         toast.success('Đã xóa ảnh biến thể thành công!');
-        await fetchVariants(selectedProductId);
-        if (managingVariantImages) {
-          const vRes = await productApi.getProductById(selectedProductId);
-          if (vRes.success && vRes.data) {
-            const updated = vRes.data.variants?.find((v) => v.variant_id === managingVariantImages.variant_id);
-            if (updated) setManagingVariantImages(updated);
-          }
-        }
+        if (managingVariantImages) await refreshManagedVariant(managingVariantImages.variant_id);
       }
     } catch (err) {
       toast.error(err.message || 'Lỗi xóa ảnh biến thể');
@@ -295,17 +259,10 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
 
     let parsed = v.specifications;
     if (typeof parsed === 'string') {
-      try {
-        parsed = JSON.parse(parsed);
-      } catch (e) {
-        parsed = null;
-      }
+      try { parsed = JSON.parse(parsed); } catch { parsed = null; }
     }
     if (parsed && typeof parsed === 'object') {
-      const list = Object.entries(parsed).map(([k, val]) => ({
-        key: k,
-        value: typeof val === 'object' ? JSON.stringify(val) : String(val),
-      }));
+      const list = Object.entries(parsed).map(([k, val]) => ({ key: k, value: typeof val === 'object' ? JSON.stringify(val) : String(val) }));
       setEditSpecsList(list.length > 0 ? list : [{ key: '', value: '' }]);
     } else {
       setEditSpecsList([{ key: '', value: '' }]);
@@ -315,19 +272,16 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   const handleUpdateVariant = async (e) => {
     e.preventDefault();
     if (!editingVariant) return;
-
     setUpdating(true);
     try {
-      const payload = {
+      const res = await productApi.updateVariant(editingVariant.variant_id, {
         variant_name: editVariantName.trim() || editingVariant.variant_name,
         price: parseFloat(editPrice),
         sale_price: editSalePrice ? parseFloat(editSalePrice) : null,
         stock: parseInt(editStock),
         warranty_months: parseInt(editWarranty) || 12,
         specifications: parseSpecsToObj(editSpecsList),
-      };
-
-      const res = await productApi.updateVariant(editingVariant.variant_id, payload);
+      });
       if (res.success) {
         toast.success(`Đã cập nhật biến thể #${editingVariant.sku} thành công!`);
         setEditingVariant(null);
@@ -341,12 +295,8 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
   };
 
   const handleDeleteVariant = async (variantId, name) => {
-    if (productDetail?.variants?.length <= 1) {
-      toast.warning('Sản phẩm phải có ít nhất 1 biến thể!');
-      return;
-    }
+    if (productDetail?.variants?.length <= 1) return toast.warning('Sản phẩm phải có ít nhất 1 biến thể!');
     if (!window.confirm(`Bạn có chắc muốn xóa biến thể "${name}"?`)) return;
-
     try {
       const res = await productApi.deleteVariant(variantId);
       if (res.success) {
@@ -358,366 +308,137 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
     }
   };
 
-  // Reusable Specifications Editor UI
-  const renderSpecsEditor = (specsList, setSpecsList) => {
-    return (
-      <div
-        style={{
-          marginTop: 14,
-          padding: 14,
-          backgroundColor: '#F9FAFB',
-          borderRadius: 8,
-          border: '1px solid #E5E7EB',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 10,
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <div>
-            <label
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: '#111827',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span>⚡ Thông số kỹ thuật (Cột `specifications` JSON)</span>
-            </label>
-            <span style={{ fontSize: 11.5, color: '#6B7280' }}>
-              Nhập các cặp Tên thông số - Giá trị. Lưu tự động dưới dạng JSON trong MySQL.
-            </span>
-          </div>
-
-          {/* Quick Presets */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Mẫu nhanh:</span>
-            <button
-              type="button"
-              onClick={() => applyPreset(setSpecsList, 'mouse')}
-              style={{
-                fontSize: 11,
-                padding: '3px 8px',
-                borderRadius: 4,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #D1D5DB',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              🖱️ Chuột
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPreset(setSpecsList, 'keyboard')}
-              style={{
-                fontSize: 11,
-                padding: '3px 8px',
-                borderRadius: 4,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #D1D5DB',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              ⌨️ Bàn phím
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPreset(setSpecsList, 'headphone')}
-              style={{
-                fontSize: 11,
-                padding: '3px 8px',
-                borderRadius: 4,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #D1D5DB',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              🎧 Tai nghe
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPreset(setSpecsList, 'monitor')}
-              style={{
-                fontSize: 11,
-                padding: '3px 8px',
-                borderRadius: 4,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #D1D5DB',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              🖥️ Màn hình
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic Key-Value Rows */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {specsList.map((item, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Tên thông số (VD: Màu sắc, DPI, Switch...)"
-                value={item.key}
-                onChange={(e) => updateSpecRow(setSpecsList, idx, 'key', e.target.value)}
-                className="form-input"
-                style={{ flex: 1, height: 36, fontSize: 13, backgroundColor: '#FFFFFF' }}
-              />
-              <span style={{ fontWeight: 800, color: '#9CA3AF' }}>:</span>
-              <input
-                type="text"
-                placeholder="Giá trị (VD: Đen nhám, 35.000 DPI, ROG RX Red...)"
-                value={item.value}
-                onChange={(e) => updateSpecRow(setSpecsList, idx, 'value', e.target.value)}
-                className="form-input"
-                style={{ flex: 1.5, height: 36, fontSize: 13, backgroundColor: '#FFFFFF' }}
-              />
-              <button
-                type="button"
-                onClick={() => removeSpecRow(setSpecsList, idx)}
-                style={{
-                  padding: '6px',
-                  color: '#EF4444',
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                  border: 'none',
-                  background: 'none',
-                }}
-                title="Xóa thông số này"
-              >
-                <Icons.Trash2 size={16} />
-              </button>
-            </div>
+  const renderSpecsEditor = (specsList, setSpecsList) => (
+    <Paper elevation={0} sx={{ mt: 2, p: 2, bgcolor: '#F9FAFB', borderRadius: 2, border: '1px solid #E5E7EB' }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: 13, fontWeight: 800 }}>⚡ Thông số kỹ thuật (Cột `specifications` JSON)</Typography>
+          <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>
+            Nhập các cặp Tên thông số - Giá trị. Lưu tự động dưới dạng JSON trong MySQL.
+          </Typography>
+        </Box>
+        <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap">
+          <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'text.disabled' }}>Mẫu nhanh:</Typography>
+          {[
+            { id: 'mouse', label: '🖱️ Chuột' },
+            { id: 'keyboard', label: '⌨️ Bàn phím' },
+            { id: 'headphone', label: '🎧 Tai nghe' },
+            { id: 'monitor', label: '🖥️ Màn hình' },
+          ].map((p) => (
+            <Button key={p.id} size="small" variant="outlined" onClick={() => applyPreset(setSpecsList, p.id)} sx={{ py: 0.25, px: 1, fontSize: 11, bgcolor: '#FFF', borderColor: '#D1D5DB', color: 'text.primary' }}>
+              {p.label}
+            </Button>
           ))}
-        </div>
+        </Stack>
+      </Stack>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-          <button
-            type="button"
-            onClick={() => addSpecRow(setSpecsList)}
-            style={{
-              fontSize: 12.5,
-              padding: '5px 12px',
-              borderRadius: 6,
-              backgroundColor: '#EFF6FF',
-              color: '#2563EB',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: '1px solid #BFDBFE',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <Icons.Plus size={14} />
-            <span>Thêm dòng thông số</span>
-          </button>
+      <Stack spacing={1}>
+        {specsList.map((item, idx) => (
+          <Stack key={idx} direction="row" alignItems="center" spacing={1}>
+            <TextField
+              size="small" placeholder="Tên thông số (VD: Màu sắc, DPI, Switch...)" value={item.key}
+              onChange={(e) => updateSpecRow(setSpecsList, idx, 'key', e.target.value)}
+              sx={{ flex: 1, bgcolor: '#FFF' }}
+            />
+            <Typography sx={{ fontWeight: 800, color: 'text.disabled' }}>:</Typography>
+            <TextField
+              size="small" placeholder="Giá trị (VD: Đen nhám, 35.000 DPI...)" value={item.value}
+              onChange={(e) => updateSpecRow(setSpecsList, idx, 'value', e.target.value)}
+              sx={{ flex: 1.5, bgcolor: '#FFF' }}
+            />
+            <IconButton size="small" color="error" onClick={() => removeSpecRow(setSpecsList, idx)}>
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Stack>
+        ))}
+      </Stack>
 
-          <span style={{ fontSize: 11.5, color: '#6B7280', fontFamily: 'monospace' }}>
-            Đã nhập: {specsList.filter((s) => s.key.trim()).length} thông số
-          </span>
-        </div>
-      </div>
-    );
-  };
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.5 }}>
+        <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => addSpecRow(setSpecsList)} sx={{ bgcolor: '#EFF6FF', borderColor: '#BFDBFE', color: '#2563EB', fontSize: 12.5 }}>
+          Thêm dòng thông số
+        </Button>
+        <Typography sx={{ fontSize: 11.5, color: 'text.secondary', fontFamily: 'monospace' }}>
+          Đã nhập: {specsList.filter((s) => s.key.trim()).length} thông số
+        </Typography>
+      </Stack>
+    </Paper>
+  );
 
   return (
-    <div>
-      {/* Product Selector Bar */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 8,
-          padding: 16,
-          border: '1px solid var(--border-light)',
-          marginBottom: 20,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 260 }}>
-          <Icons.Sliders size={20} style={{ color: 'var(--primary)' }} />
-          <span style={{ fontWeight: 800, fontSize: 14 }}>Chọn sản phẩm:</span>
-          <select
-            className="form-input"
-            style={{ maxWidth: 400, fontWeight: 600 }}
-            value={selectedProductId}
-            onChange={(e) => setSelectedProductId(e.target.value)}
-          >
+    <Box>
+      <Paper elevation={0} sx={{ p: 2, mb: 2.5, borderRadius: 2, border: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flex: 1, minWidth: 260 }}>
+          {Icons?.Sliders && <Icons.Sliders size={20} style={{ color: '#E30019' }} />}
+          <Typography sx={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap' }}>Chọn sản phẩm:</Typography>
+          <Select size="small" value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} sx={{ maxWidth: 400, width: '100%', fontWeight: 600 }}>
             {products.map((p) => (
-              <option key={p.product_id} value={p.product_id}>
-                {p.product_name} ({p.brand_name || 'GearK'})
-              </option>
+              <MenuItem key={p.product_id} value={p.product_id}>{p.product_name} ({p.brand_name || 'GearK'})</MenuItem>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Stack>
 
-        <button
+        <Button
+          variant="contained"
+          color={showAddForm ? 'inherit' : 'primary'}
+          startIcon={showAddForm ? <CloseIcon /> : <AddIcon />}
           onClick={() => setShowAddForm(!showAddForm)}
-          style={{
-            backgroundColor: showAddForm ? '#6B7280' : 'var(--primary)',
-            color: '#FFFFFF',
-            padding: '8px 16px',
-            borderRadius: 6,
-            fontWeight: 700,
-            fontSize: 13,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
         >
-          {showAddForm ? <Icons.X size={16} /> : <Icons.Plus size={16} />}
           {showAddForm ? 'Đóng form' : 'Thêm biến thể (Variant)'}
-        </button>
-      </div>
+        </Button>
+      </Paper>
 
-      {/* Add Variant Form */}
       {showAddForm && (
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 8,
-            padding: 20,
-            border: '2px solid var(--primary)',
-            marginBottom: 20,
-          }}
-        >
-          <h4 style={{ fontSize: 15, fontWeight: 800, marginBottom: 14, color: 'var(--primary)' }}>
+        <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: 2, border: '2px solid', borderColor: 'primary.main' }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 800, mb: 1.75, color: 'primary.main' }}>
             + Thêm biến thể mới cho: {productDetail?.product_name}
-          </h4>
-          <form onSubmit={handleCreateVariant}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: 12,
-              }}
-            >
-              <div className="form-group">
-                <label className="form-label">Tên biến thể *</label>
-                <input
-                  type="text"
-                  required
-                  className="form-input"
-                  placeholder="VD: Bản Không dây / Màu Trắng / Red Switch..."
-                  value={newVariantName}
-                  onChange={(e) => setNewVariantName(e.target.value)}
-                />
-              </div>
+          </Typography>
+          <Box component="form" onSubmit={handleCreateVariant}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Tên biến thể *</Typography>
+                <TextField fullWidth size="small" required placeholder="VD: Bản Không dây / Màu Trắng..." value={newVariantName} onChange={(e) => setNewVariantName(e.target.value)} />
+              </Box>
 
-              <div className="form-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <label className="form-label" style={{ margin: 0 }}>
-                    Mã SKU <span style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 600 }}>(Tự động sinh)</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleRegenerateSku}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#6366F1',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3,
-                      padding: '2px 4px',
-                    }}
-                    title="Tự động tạo mã SKU mới theo tên sản phẩm"
-                  >
-                    <Icons.Sparkles size={13} />
+              <Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                    Mã SKU <Box component="span" sx={{ fontSize: '0.72rem', color: 'success.main' }}>(Tự động sinh)</Box>
+                  </Typography>
+                  <Button size="small" onClick={handleRegenerateSku} startIcon={<AutoAwesomeIcon sx={{ fontSize: 13 }} />} sx={{ py: 0, px: 0.5, fontSize: 12, color: '#6366F1' }}>
                     Tự sinh mã
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="VD: RZ-VIPER-TRANG-8K2A"
-                  value={newSku}
-                  onChange={(e) => {
-                    setSkuManuallyEdited(true);
-                    setNewSku(e.target.value.toUpperCase());
-                  }}
-                  style={{ fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.5px' }}
+                  </Button>
+                </Stack>
+                <TextField
+                  fullWidth size="small" placeholder="VD: RZ-VIPER-TRANG-8K2A" value={newSku}
+                  onChange={(e) => { setSkuManuallyEdited(true); setNewSku(e.target.value.toUpperCase()); }}
+                  sx={{ '& input': { fontFamily: 'monospace', fontWeight: 600 } }}
                 />
-                <span style={{ fontSize: '0.72rem', color: '#6B7280', display: 'block', marginTop: 3 }}>
-                  *Mã SKU định danh duy nhất. Tự động sinh theo tên biến thể hoặc có thể tự nhập.
-                </span>
-              </div>
+              </Box>
 
-              <div className="form-group">
-                <label className="form-label">Giá niêm yết (₫) *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="1000"
-                  className="form-input"
-                  placeholder="VD: 1500000"
-                  value={newPrice}
-                  onChange={(e) => setNewPrice(e.target.value)}
-                />
-              </div>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Giá niêm yết (₫) *</Typography>
+                <TextField fullWidth size="small" type="number" required inputProps={{ min: 0, step: 1000 }} placeholder="VD: 1500000" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
+              </Box>
 
-              <div className="form-group">
-                <label className="form-label">Giá khuyến mãi (₫)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  className="form-input"
-                  placeholder="Để trống nếu không giảm"
-                  value={newSalePrice}
-                  onChange={(e) => setNewSalePrice(e.target.value)}
-                />
-              </div>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Giá khuyến mãi (₫)</Typography>
+                <TextField fullWidth size="small" type="number" inputProps={{ min: 0, step: 1000 }} placeholder="Để trống nếu không giảm" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} />
+              </Box>
 
-              <div className="form-group">
-                <label className="form-label">Số lượng tồn kho</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="form-input"
-                  value={newStock}
-                  onChange={(e) => setNewStock(e.target.value)}
-                />
-              </div>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Số lượng tồn kho</Typography>
+                <TextField fullWidth size="small" type="number" inputProps={{ min: 0 }} value={newStock} onChange={(e) => setNewStock(e.target.value)} />
+              </Box>
 
-              <div className="form-group">
-                <label className="form-label">Bảo hành (tháng)</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="form-input"
-                  value={newWarranty}
-                  onChange={(e) => setNewWarranty(e.target.value)}
-                />
-              </div>
-            </div>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Bảo hành (tháng)</Typography>
+                <TextField fullWidth size="small" type="number" inputProps={{ min: 0 }} value={newWarranty} onChange={(e) => setNewWarranty(e.target.value)} />
+              </Box>
+            </Box>
 
-            {/* Specifications Key-Value Builder */}
             {renderSpecsEditor(newSpecsList, setNewSpecsList)}
 
-            {/* Variant Images Upload (Multer) */}
-            <div style={{ marginTop: 14 }}>
+            <Box sx={{ mt: 2 }}>
               <ImageUploadField
                 label="Danh sách hình ảnh biến thể (Multer File Upload)"
                 value={newVariantImages}
@@ -725,732 +446,281 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, onN
                 multiple={true}
                 hint="Tải lên một hoặc nhiều tệp ảnh riêng cho biến thể này (Multer)"
               />
-            </div>
+            </Box>
 
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => setShowAddForm(false)}
-                style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #D1D5DB', fontWeight: 600 }}
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                style={{
-                  backgroundColor: 'var(--primary)',
-                  color: '#FFFFFF',
-                  padding: '8px 20px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                }}
-              >
-                {submitting ? 'Đang lưu...' : 'Lưu biến thể mới'}
-              </button>
-            </div>
-          </form>
-        </div>
+            <Stack direction="row" justifyContent="flex-end" spacing={1.25} sx={{ mt: 2 }}>
+              <Button variant="outlined" color="inherit" onClick={() => setShowAddForm(false)}>Hủy</Button>
+              <Button type="submit" variant="contained" disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu biến thể mới'}</Button>
+            </Stack>
+          </Box>
+        </Paper>
       )}
 
-      {/* Product Summary Header */}
       {productDetail && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            padding: 16,
-            backgroundColor: '#FFFFFF',
-            borderRadius: 8,
-            border: '1px solid var(--border-light)',
-            marginBottom: 16,
-          }}
-        >
-          <img
-            src={productDetail.thumbnail_url}
-            alt=""
-            style={{ width: 60, height: 60, objectFit: 'contain', borderRadius: 6, border: '1px solid #E5E7EB' }}
-          />
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#111827' }}>
-              {productDetail.product_name}
-            </div>
-            <div style={{ fontSize: 12.5, color: '#6B7280', display: 'flex', gap: 14, marginTop: 4 }}>
-              <span>Thương hiệu: <strong>{productDetail.brand_name || 'N/A'}</strong></span>
-              <span>Danh mục: <strong>{productDetail.category_name || 'N/A'}</strong></span>
-              <span>Số biến thể: <strong>{productDetail.variants?.length || 0}</strong></span>
-            </div>
-          </div>
-        </div>
+        <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box component="img" src={productDetail.thumbnail_url} alt="" sx={{ width: 60, height: 60, objectFit: 'contain', borderRadius: 1.5, border: '1px solid #E5E7EB' }} />
+          <Box>
+            <Typography sx={{ fontSize: 16, fontWeight: 900 }}>{productDetail.product_name}</Typography>
+            <Stack direction="row" spacing={2} sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}>
+              <Box>Thương hiệu: <strong>{productDetail.brand_name || 'N/A'}</strong></Box>
+              <Box>Danh mục: <strong>{productDetail.category_name || 'N/A'}</strong></Box>
+              <Box>Số biến thể: <strong>{productDetail.variants?.length || 0}</strong></Box>
+            </Stack>
+          </Box>
+        </Paper>
       )}
 
-      {/* Variants Table */}
-      <div className="data-table-card">
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
         {loadingDetail ? (
-          <div style={{ textAlign: 'center', padding: '30px 0', color: '#6B7280' }}>
-            Đang tải dữ liệu biến thể...
-          </div>
+          <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>Đang tải dữ liệu biến thể...</Box>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Tên biến thể</th>
-                <th>Ảnh biến thể</th>
-                <th>Thông số kỹ thuật (JSON Specifications)</th>
-                <th>Giá niêm yết</th>
-                <th>Giá khuyến mãi</th>
-                <th>Tồn kho</th>
-                <th>Bảo hành</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(!productDetail?.variants || productDetail.variants.length === 0) ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
-                    Chưa có biến thể nào cho sản phẩm này
-                  </td>
-                </tr>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>SKU</TableCell>
+                <TableCell>Tên biến thể</TableCell>
+                <TableCell>Ảnh biến thể</TableCell>
+                <TableCell>Thông số kỹ thuật (JSON)</TableCell>
+                <TableCell>Giá niêm yết</TableCell>
+                <TableCell>Giá khuyến mãi</TableCell>
+                <TableCell>Tồn kho</TableCell>
+                <TableCell>Bảo hành</TableCell>
+                <TableCell>Thao tác</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {!productDetail?.variants?.length ? (
+                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có biến thể nào cho sản phẩm này</TableCell></TableRow>
               ) : (
                 productDetail.variants.map((v) => {
                   let specsObj = v.specifications;
                   if (typeof specsObj === 'string') {
-                    try {
-                      specsObj = JSON.parse(specsObj);
-                    } catch (e) {
-                      specsObj = null;
-                    }
+                    try { specsObj = JSON.parse(specsObj); } catch { specsObj = null; }
                   }
-                  const specEntries =
-                    specsObj && typeof specsObj === 'object'
-                      ? Object.entries(specsObj)
-                      : [];
+                  const specEntries = specsObj && typeof specsObj === 'object' ? Object.entries(specsObj) : [];
 
                   return (
-                    <tr key={v.variant_id}>
-                      <td style={{ fontWeight: 800, color: 'var(--primary)', fontFamily: 'monospace' }}>
-                        {v.sku}
-                      </td>
-                      <td style={{ fontWeight: 700 }}>
-                        {v.variant_name}
-                      </td>
-                      {/* Variant Images Gallery Column */}
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            {v.images && v.images.length > 0 ? (
-                              v.images.slice(0, 3).map((img, idx) => (
-                                <div
-                                  key={img.image_id || idx}
-                                  style={{
-                                    width: 34,
-                                    height: 34,
-                                    borderRadius: 4,
-                                    border: img.is_primary ? '2px solid var(--primary)' : '1px solid #D1D5DB',
-                                    overflow: 'hidden',
-                                    backgroundColor: '#FFF',
-                                    position: 'relative',
-                                  }}
-                                  title={img.is_primary ? 'Ảnh chính của biến thể' : 'Ảnh biến thể'}
-                                >
-                                  <img
-                                    src={img.image_url}
-                                    alt=""
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                  />
-                                  {img.is_primary === 1 && (
-                                    <span
-                                      style={{
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        left: 0,
-                                        right: 0,
-                                        backgroundColor: 'var(--primary)',
-                                        color: '#FFF',
-                                        fontSize: 7,
-                                        textAlign: 'center',
-                                        fontWeight: 900,
-                                      }}
-                                    >
-                                      CHÍNH
-                                    </span>
-                                  )}
-                                </div>
-                              ))
-                            ) : (
-                              <span style={{ fontSize: 11, color: '#9CA3AF' }}>Chưa có</span>
-                            )}
-                            {v.images && v.images.length > 3 && (
-                              <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>
-                                +{v.images.length - 3}
-                              </span>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setManagingVariantImages(v)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '4px 8px',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              backgroundColor: '#F3F4F6',
-                              color: '#1F2937',
-                              border: '1px solid #D1D5DB',
-                              cursor: 'pointer',
-                              marginLeft: 4,
-                              whiteSpace: 'nowrap',
-                            }}
-                            title="Quản lý danh sách ảnh của biến thể này"
-                          >
-                            <Icons.Camera size={13} />
-                            <span>Ảnh ({v.images?.length || 0})</span>
-                          </button>
-                        </div>
-                      </td>
-                      {/* Specifications column */}
-                      <td>
-                        {specEntries.length > 0 ? (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 300 }}>
-                            {specEntries.map(([k, val], i) => (
-                              <span
-                                key={i}
-                                style={{
-                                  fontSize: 11,
-                                  backgroundColor: '#F3F4F6',
-                                  color: '#374151',
-                                  padding: '2px 6px',
-                                  borderRadius: 4,
-                                  border: '1px solid #E5E7EB',
-                                  display: 'inline-flex',
-                                  gap: 3,
-                                }}
+                    <TableRow key={v.variant_id} hover>
+                      <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'monospace', py: 1.5 }}>{v.sku}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{v.variant_name}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" alignItems="center" spacing={0.75}>
+                          {v.images?.length > 0 ? (
+                            v.images.slice(0, 3).map((img, idx) => (
+                              <Box
+                                key={img.image_id || idx}
+                                sx={{ width: 34, height: 34, borderRadius: 1, border: img.is_primary ? '2px solid #E30019' : '1px solid #D1D5DB', overflow: 'hidden', bgcolor: '#FFF', position: 'relative' }}
                               >
-                                <strong style={{ color: '#1F2937' }}>{k}:</strong> {String(val)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span style={{ color: '#9CA3AF', fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 600 }}>
-                        {formatPrice(v.price)}
-                      </td>
-                      <td>
-                        {v.sale_price ? (
-                          <span style={{ fontWeight: 700, color: '#EF4444' }}>
-                            {formatPrice(v.sale_price)}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#9CA3AF', fontSize: 12 }}>Không có</span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          style={{
-                            fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: 4,
-                            fontSize: 12,
-                            backgroundColor: v.stock <= 5 ? '#FEE2E2' : '#ECFDF5',
-                            color: v.stock <= 5 ? '#EF4444' : '#059669',
-                          }}
-                        >
-                          {v.stock} chiếc {v.stock <= 5 && '⚠️'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 12.5 }}>
-                        {v.warranty_months} tháng
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            onClick={() => handleOpenEdit(v)}
-                            style={{
-                              color: '#2563EB',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              padding: '4px 8px',
-                              backgroundColor: '#EFF6FF',
-                              borderRadius: 4,
-                            }}
-                          >
-                            Sửa thông số / giá
-                          </button>
-                          {isAdmin && (
-                            <button
-                              onClick={() => handleDeleteVariant(v.variant_id, v.variant_name)}
-                              style={{ color: '#EF4444', padding: 4 }}
-                              title="Xóa biến thể"
-                            >
-                              <Icons.Trash2 size={16} />
-                            </button>
+                                <Box component="img" src={img.image_url} alt="" sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                {img.is_primary === 1 && (
+                                  <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, bgcolor: 'primary.main', color: '#FFF', fontSize: 7, textAlign: 'center', fontWeight: 900 }}>CHÍNH</Box>
+                                )}
+                              </Box>
+                            ))
+                          ) : (
+                            <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>Chưa có</Typography>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                          {v.images?.length > 3 && <Typography sx={{ fontSize: 11, color: 'text.secondary', fontWeight: 700 }}>+{v.images.length - 3}</Typography>}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setManagingVariantImages(v)}
+                            startIcon={Icons?.Camera ? <Icons.Camera size={13} /> : null}
+                            sx={{ py: 0.4, px: 1, fontSize: 11, bgcolor: '#F3F4F6', borderColor: '#D1D5DB', color: 'text.primary', whiteSpace: 'nowrap' }}
+                          >
+                            Ảnh ({v.images?.length || 0})
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        {specEntries.length > 0 ? (
+                          <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ maxWidth: 300 }}>
+                            {specEntries.map(([k, val], i) => (
+                              <Box key={i} component="span" sx={{ fontSize: 11, bgcolor: '#F3F4F6', px: 0.75, py: 0.25, borderRadius: 1, border: '1px solid #E5E7EB' }}>
+                                <strong>{k}:</strong> {String(val)}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>—</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{formatPrice(v.price)}</TableCell>
+                      <TableCell>
+                        {v.sale_price ? (
+                          <Typography sx={{ fontWeight: 700, color: 'error.main', fontSize: 13.5 }}>{formatPrice(v.sale_price)}</Typography>
+                        ) : (
+                          <Typography sx={{ color: 'text.disabled', fontSize: 12 }}>Không có</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={`${v.stock} chiếc ${v.stock <= 5 ? '⚠️' : ''}`}
+                          size="small"
+                          sx={{ fontWeight: 800, fontSize: 12, bgcolor: v.stock <= 5 ? '#FEE2E2' : '#ECFDF5', color: v.stock <= 5 ? '#EF4444' : '#059669' }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12.5 }}>{v.warranty_months} tháng</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                          <Button size="small" onClick={() => handleOpenEdit(v)} sx={{ fontSize: 12, fontWeight: 700, py: 0.5, px: 1, bgcolor: '#EFF6FF', color: '#2563EB', whiteSpace: 'nowrap' }}>
+                            Sửa thông số / giá
+                          </Button>
+                          {isAdmin && (
+                            <IconButton size="small" color="error" onClick={() => handleDeleteVariant(v.variant_id, v.variant_name)}>
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </TableContainer>
 
-      {/* Edit Variant Modal (Includes Specifications Editor) */}
-      {editingVariant && (
-        <div className="modal-overlay" onClick={() => setEditingVariant(null)}>
-          <div
-            className="modal-card"
-            style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h3 className="modal-title">Cập nhật biến thể: {editingVariant.sku}</h3>
-              <button onClick={() => setEditingVariant(null)}>
-                <Icons.X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <form onSubmit={handleUpdateVariant}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Mã SKU</label>
-                    <input
-                      type="text"
-                      disabled
-                      className="form-input"
-                      value={editingVariant.sku}
-                      style={{ backgroundColor: '#F3F4F6' }}
-                    />
-                  </div>
+      {/* Edit Variant Modal */}
+      <Dialog open={Boolean(editingVariant)} onClose={() => setEditingVariant(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: 17 }}>
+          Cập nhật biến thể: {editingVariant?.sku}
+          <IconButton size="small" onClick={() => setEditingVariant(null)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <Box component="form" onSubmit={handleUpdateVariant}>
+          <DialogContent dividers>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Mã SKU</Typography>
+                <TextField fullWidth size="small" disabled value={editingVariant?.sku || ''} sx={{ bgcolor: '#F3F4F6' }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Tên biến thể *</Typography>
+                <TextField fullWidth size="small" required value={editVariantName} onChange={(e) => setEditVariantName(e.target.value)} />
+              </Box>
+            </Box>
 
-                  <div className="form-group">
-                    <label className="form-label">Tên biến thể *</label>
-                    <input
-                      type="text"
-                      required
-                      className="form-input"
-                      value={editVariantName}
-                      onChange={(e) => setEditVariantName(e.target.value)}
-                    />
-                  </div>
-                </div>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 1.25 }}>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Giá niêm yết (₫) *</Typography>
+                <TextField fullWidth size="small" type="number" required inputProps={{ min: 0, step: 1000 }} value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Giá khuyến mãi (₫)</Typography>
+                <TextField fullWidth size="small" type="number" inputProps={{ min: 0, step: 1000 }} placeholder="Trống nếu không giảm" value={editSalePrice} onChange={(e) => setEditSalePrice(e.target.value)} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Tồn kho *</Typography>
+                <TextField fullWidth size="small" type="number" required inputProps={{ min: 0 }} value={editStock} onChange={(e) => setEditStock(e.target.value)} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Bảo hành (tháng)</Typography>
+                <TextField fullWidth size="small" type="number" inputProps={{ min: 0 }} value={editWarranty} onChange={(e) => setEditWarranty(e.target.value)} />
+              </Box>
+            </Box>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-                  <div className="form-group">
-                    <label className="form-label">Giá niêm yết (₫) *</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="1000"
-                      className="form-input"
-                      value={editPrice}
-                      onChange={(e) => setEditPrice(e.target.value)}
-                    />
-                  </div>
+            {renderSpecsEditor(editSpecsList, setEditSpecsList)}
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button variant="outlined" color="inherit" onClick={() => setEditingVariant(null)}>Hủy</Button>
+            <Button type="submit" variant="contained" disabled={updating}>{updating ? 'Đang lưu...' : 'Lưu thay đổi'}</Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
 
-                  <div className="form-group">
-                    <label className="form-label">Giá khuyến mãi (₫)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1000"
-                      className="form-input"
-                      placeholder="Trống nếu không giảm"
-                      value={editSalePrice}
-                      onChange={(e) => setEditSalePrice(e.target.value)}
-                    />
-                  </div>
+      {/* Variant Images Manager Modal */}
+      <Dialog open={Boolean(managingVariantImages)} onClose={() => setManagingVariantImages(null)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1.25}>
+            <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: 'primary.light', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {Icons?.Camera && <Icons.Camera size={20} />}
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Quản lý danh sách ảnh biến thể</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                Biến thể: <strong>{managingVariantImages?.variant_name}</strong> (SKU: {managingVariantImages?.sku})
+              </Typography>
+            </Box>
+          </Stack>
+          <IconButton size="small" onClick={() => setManagingVariantImages(null)}><CloseIcon /></IconButton>
+        </DialogTitle>
 
-                  <div className="form-group">
-                    <label className="form-label">Tồn kho *</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      className="form-input"
-                      value={editStock}
-                      onChange={(e) => setEditStock(e.target.value)}
-                    />
-                  </div>
+        <DialogContent dividers>
+          <Paper elevation={0} sx={{ bgcolor: '#F8FAFC', border: '2px dashed #CBD5E1', borderRadius: 2, p: 2, textAlign: 'center', mb: 2.5 }}>
+            <input
+              ref={variantFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => handleAddImagesToVariant(e.target.files)}
+            />
+            <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: uploadingVariantImg ? '#EFF6FF' : 'primary.light', color: uploadingVariantImg ? '#2563EB' : 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 1 }}>
+              {uploadingVariantImg ? <CircularProgress size={18} /> : <CloudUploadIcon />}
+            </Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+              {uploadingVariantImg ? 'Đang tải ảnh lên server bằng Multer...' : 'Tải lên ảnh mới cho biến thể này'}
+            </Typography>
+            <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mt: 0.25, mb: 1.5 }}>
+              Hỗ trợ: JPG, PNG, WEBP, GIF, SVG (Tối đa 10MB/ảnh)
+            </Typography>
 
-                  <div className="form-group">
-                    <label className="form-label">Bảo hành (tháng)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      className="form-input"
-                      value={editWarranty}
-                      onChange={(e) => setEditWarranty(e.target.value)}
-                    />
-                  </div>
-                </div>
+            <Stack direction="row" justifyContent="center" spacing={1} flexWrap="wrap">
+              <Button size="small" variant="contained" disabled={uploadingVariantImg} startIcon={<CloudUploadIcon />} onClick={() => variantFileInputRef.current?.click()}>
+                Chọn tệp ảnh từ máy tính
+              </Button>
+              <Button size="small" variant="outlined" color="inherit" onClick={() => setShowAddUrlInput(!showAddUrlInput)} sx={{ bgcolor: '#FFF' }}>
+                {showAddUrlInput ? 'Ẩn link URL' : 'Thêm bằng URL'}
+              </Button>
+            </Stack>
 
-                {/* Edit Specifications */}
-                {renderSpecsEditor(editSpecsList, setEditSpecsList)}
+            {showAddUrlInput && (
+              <Box component="form" onSubmit={handleAddImageUrlToVariant} sx={{ mt: 1.5, display: 'flex', gap: 1 }}>
+                <TextField fullWidth size="small" type="url" required placeholder="https://images.unsplash.com/photo-..." value={customImageUrl} onChange={(e) => setCustomImageUrl(e.target.value)} sx={{ bgcolor: '#FFF' }} />
+                <Button type="submit" variant="contained" color="success" disabled={uploadingVariantImg} sx={{ whiteSpace: 'nowrap' }}>Thêm URL</Button>
+              </Box>
+            )}
+          </Paper>
 
-                <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => setEditingVariant(null)}
-                    style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #D1D5DB' }}
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={updating}
-                    style={{
-                      backgroundColor: 'var(--primary)',
-                      color: '#FFFFFF',
-                      padding: '8px 24px',
-                      borderRadius: 6,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {updating ? 'Đang lưu...' : 'Lưu thay đổi'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+          <Typography sx={{ fontSize: 13.5, fontWeight: 800, mb: 1.25 }}>
+            Danh sách ảnh hiện tại ({managingVariantImages?.images?.length || 0} ảnh)
+          </Typography>
 
-      {/* Modal: Variant Images Manager (Quản lý danh sách ảnh biến thể) */}
-      {managingVariantImages && (
-        <div className="modal-overlay" onClick={() => setManagingVariantImages(null)}>
-          <div
-            className="modal-card"
-            style={{ maxWidth: 660, maxHeight: '90vh', overflowY: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 8,
-                    backgroundColor: 'rgba(227, 0, 25, 0.1)',
-                    color: 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icons.Camera size={20} />
-                </div>
-                <div>
-                  <h3 className="modal-title" style={{ margin: 0, fontSize: 16 }}>
-                    Quản lý danh sách ảnh biến thể
-                  </h3>
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>
-                    Biến thể: <strong>{managingVariantImages.variant_name}</strong> (SKU: {managingVariantImages.sku})
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setManagingVariantImages(null)}
-                style={{ color: '#6B7280', cursor: 'pointer', background: 'none', border: 'none' }}
-              >
-                <Icons.X size={20} />
-              </button>
-            </div>
+          {!managingVariantImages?.images?.length ? (
+            <Paper elevation={0} sx={{ p: 3, textAlign: 'center', bgcolor: '#F9FAFB', border: '1px solid #E5E7EB', color: 'text.secondary', fontSize: 13 }}>
+              Biến thể này chưa có hình ảnh nào. Hãy chọn tệp ảnh ở trên để tải lên!
+            </Paper>
+          ) : (
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))', gap: 1.5 }}>
+              {managingVariantImages.images.map((img) => {
+                const isPrimary = img.is_primary === 1;
+                return (
+                  <Paper key={img.image_id} elevation={0} sx={{ border: isPrimary ? '2px solid #E30019' : '1px solid #E5E7EB', borderRadius: 2, p: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Box sx={{ width: '100%', height: 100, borderRadius: 1, overflow: 'hidden', bgcolor: '#FAFAFA', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
+                      <Box component="img" src={img.image_url} alt="" onError={(e) => { e.target.src = 'https://placehold.co/120x120?text=Loi+Anh'; }} sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </Box>
+                    {isPrimary ? (
+                      <Chip label="⭐ Ảnh chính" size="small" sx={{ bgcolor: 'primary.light', color: 'primary.main', fontSize: 11, fontWeight: 800, mb: 0.75, height: 22 }} />
+                    ) : (
+                      <Button size="small" onClick={() => handleSetPrimaryVariantImage(img.image_id)} sx={{ fontSize: 11, py: 0.25, px: 1, mb: 0.75, bgcolor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB' }}>
+                        Đặt làm ảnh chính
+                      </Button>
+                    )}
+                    <Button size="small" color="error" onClick={() => handleDeleteVariantImage(img.image_id)} startIcon={<DeleteOutlineIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11, py: 0.25, px: 1, bgcolor: '#FEF2F2', border: '1px solid #FECACA' }}>
+                      Xóa
+                    </Button>
+                  </Paper>
+                );
+              })}
+            </Box>
+          )}
+        </DialogContent>
 
-            <div className="modal-body">
-              {/* Multer Upload Section */}
-              <div
-                style={{
-                  backgroundColor: '#F8FAFC',
-                  border: '2px dashed #CBD5E1',
-                  borderRadius: 8,
-                  padding: 16,
-                  textAlign: 'center',
-                  marginBottom: 18,
-                }}
-              >
-                <input
-                  ref={variantFileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
-                  multiple
-                  style={{ display: 'none' }}
-                  onChange={(e) => handleAddImagesToVariant(e.target.files)}
-                />
-
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: '50%',
-                    backgroundColor: uploadingVariantImg ? '#EFF6FF' : '#FEE2E2',
-                    color: uploadingVariantImg ? '#2563EB' : 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 8px auto',
-                  }}
-                >
-                  {uploadingVariantImg ? (
-                    <div
-                      style={{
-                        width: 18,
-                        height: 18,
-                        border: '2px solid #2563EB',
-                        borderTopColor: 'transparent',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                  ) : (
-                    <Icons.Upload size={20} />
-                  )}
-                </div>
-
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
-                  {uploadingVariantImg ? 'Đang tải ảnh lên server bằng Multer...' : 'Tải lên ảnh mới cho biến thể này'}
-                </div>
-                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2, marginBottom: 10 }}>
-                  Hỗ trợ: JPG, PNG, WEBP, GIF, SVG (Tối đa 10MB/ảnh)
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    disabled={uploadingVariantImg}
-                    onClick={() => variantFileInputRef.current?.click()}
-                    style={{
-                      backgroundColor: 'var(--primary)',
-                      color: '#FFF',
-                      padding: '7px 16px',
-                      borderRadius: 6,
-                      fontWeight: 700,
-                      fontSize: 12.5,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      cursor: uploadingVariantImg ? 'wait' : 'pointer',
-                    }}
-                  >
-                    <Icons.Upload size={14} />
-                    <span>Chọn tệp ảnh từ máy tính</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAddUrlInput(!showAddUrlInput)}
-                    style={{
-                      backgroundColor: '#FFF',
-                      color: '#374151',
-                      border: '1px solid #D1D5DB',
-                      padding: '7px 14px',
-                      borderRadius: 6,
-                      fontWeight: 600,
-                      fontSize: 12.5,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {showAddUrlInput ? 'Ẩn link URL' : 'Thêm bằng URL'}
-                  </button>
-                </div>
-
-                {/* Add Image by URL input */}
-                {showAddUrlInput && (
-                  <form onSubmit={handleAddImageUrlToVariant} style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                    <input
-                      type="url"
-                      required
-                      className="form-input"
-                      placeholder="https://images.unsplash.com/photo-..."
-                      value={customImageUrl}
-                      onChange={(e) => setCustomImageUrl(e.target.value)}
-                      style={{ flex: 1, fontSize: 12.5 }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={uploadingVariantImg}
-                      style={{
-                        backgroundColor: '#10B981',
-                        color: '#FFF',
-                        padding: '6px 14px',
-                        borderRadius: 6,
-                        fontWeight: 700,
-                        fontSize: 12,
-                      }}
-                    >
-                      Thêm URL
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              {/* Existing Variant Images Grid */}
-              <div style={{ marginBottom: 12 }}>
-                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1F2937', marginBottom: 10 }}>
-                  Danh sách ảnh hiện tại ({managingVariantImages.images?.length || 0} ảnh)
-                </h4>
-
-                {(!managingVariantImages.images || managingVariantImages.images.length === 0) ? (
-                  <div
-                    style={{
-                      padding: 24,
-                      textAlign: 'center',
-                      backgroundColor: '#F9FAFB',
-                      borderRadius: 6,
-                      border: '1px solid #E5E7EB',
-                      color: '#6B7280',
-                      fontSize: 13,
-                    }}
-                  >
-                    Biến thể này chưa có hình ảnh nào. Hãy chọn tệp ảnh ở trên để tải lên!
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
-                      gap: 12,
-                    }}
-                  >
-                    {managingVariantImages.images.map((img) => {
-                      const isPrimary = img.is_primary === 1;
-
-                      return (
-                        <div
-                          key={img.image_id}
-                          style={{
-                            border: isPrimary ? '2px solid var(--primary)' : '1px solid #E5E7EB',
-                            borderRadius: 8,
-                            padding: 8,
-                            backgroundColor: '#FFFFFF',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            position: 'relative',
-                          }}
-                        >
-                          {/* Image preview box */}
-                          <div
-                            style={{
-                              width: '100%',
-                              height: 100,
-                              borderRadius: 4,
-                              overflow: 'hidden',
-                              backgroundColor: '#FAFAFA',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginBottom: 8,
-                            }}
-                          >
-                            <img
-                              src={img.image_url}
-                              alt=""
-                              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                              onError={(e) => {
-                                e.target.src = 'https://placehold.co/120x120?text=Loi+Anh';
-                              }}
-                            />
-                          </div>
-
-                          {/* Primary status badge */}
-                          {isPrimary ? (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 800,
-                                color: 'var(--primary)',
-                                backgroundColor: 'var(--primary-light)',
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                                marginBottom: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                              }}
-                            >
-                              ⭐ Ảnh chính
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleSetPrimaryVariantImage(img.image_id)}
-                              style={{
-                                fontSize: 11,
-                                color: '#2563EB',
-                                backgroundColor: '#EFF6FF',
-                                border: '1px solid #BFDBFE',
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                marginBottom: 6,
-                              }}
-                            >
-                              Đặt làm ảnh chính
-                            </button>
-                          )}
-
-                          {/* Delete image button */}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteVariantImage(img.image_id)}
-                            style={{
-                              fontSize: 11,
-                              color: '#EF4444',
-                              backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 2,
-                            }}
-                          >
-                            <Icons.Trash2 size={11} />
-                            <span>Xóa</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => setManagingVariantImages(null)}
-                  style={{
-                    backgroundColor: '#1E293B',
-                    color: '#FFF',
-                    padding: '8px 20px',
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  Đóng
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        <DialogActions sx={{ p: 2 }}>
+          <Button variant="contained" color="secondary" onClick={() => setManagingVariantImages(null)}>Đóng</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

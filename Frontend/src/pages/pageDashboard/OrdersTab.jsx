@@ -1,147 +1,124 @@
 import React from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+
+const ORDER_STATUS_OPTIONS = [
+  { value: 'pending', label: 'Chờ xác nhận' },
+  { value: 'confirmed', label: 'Đã xác nhận' },
+  { value: 'processing', label: 'Đang xử lý' },
+  { value: 'shipping', label: 'Đang giao hàng' },
+  { value: 'completed', label: 'Đã hoàn thành' },
+  { value: 'cancelled', label: 'Đã hủy' },
+  { value: 'refunded', label: 'Đã hoàn tiền' },
+];
 
 export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOrders, handleUpdateStatus, formatPrice, getOrderStatusText }) {
-  const displayedOrders = orderFilter
-    ? orders.filter((ord) => ord.order_status === orderFilter)
-    : orders;
+  const displayedOrders = orderFilter ? orders.filter((ord) => ord.order_status === orderFilter) : orders;
 
   const handleFilterChange = (e) => {
     const val = e.target.value;
     setOrderFilter(val);
-    if (typeof fetchOrders === 'function') {
-      fetchOrders(val);
-    }
+    if (typeof fetchOrders === 'function') fetchOrders(val);
   };
 
   return (
-    <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          backgroundColor: '#FFFFFF',
-          padding: '12px 16px',
-          borderRadius: 8,
-          border: '1px solid var(--border-light)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>Lọc theo trạng thái:</span>
-          <select
-            className="sort-select"
-            value={orderFilter}
-            onChange={handleFilterChange}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: '1px solid #D1D5DB',
-              fontSize: 13,
-              fontWeight: 600,
-              outline: 'none',
-              cursor: 'pointer',
-              backgroundColor: '#F9FAFB',
-            }}
-          >
-            <option value="">Tất cả trạng thái</option>
-            <option value="pending">Chờ xác nhận</option>
-            <option value="confirmed">Đã xác nhận</option>
-            <option value="processing">Đang xử lý</option>
-            <option value="shipping">Đang giao hàng</option>
-            <option value="completed">Đã hoàn thành</option>
-            <option value="cancelled">Đã hủy</option>
-            <option value="refunded">Đã hoàn tiền</option>
-          </select>
-          <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>
+    <Box>
+      <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: 2, border: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+        <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Typography sx={{ fontWeight: 700, fontSize: 13 }}>Lọc theo trạng thái:</Typography>
+          <Select size="small" displayEmpty value={orderFilter} onChange={handleFilterChange} sx={{ fontSize: 13, fontWeight: 600, minWidth: 160, bgcolor: '#F9FAFB' }}>
+            <MenuItem value="">Tất cả trạng thái</MenuItem>
+            {ORDER_STATUS_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            ))}
+          </Select>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 600 }}>
             ({displayedOrders.length} đơn hàng)
-          </span>
-        </div>
-        <button
-          onClick={() => fetchOrders && fetchOrders(orderFilter)}
-          style={{ fontSize: 12.5, color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', background: 'none', border: 'none' }}
-        >
-          Làm mới danh sách
-        </button> 
-      </div>
+          </Typography>
+        </Stack>
 
-      <div className="data-table-card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Mã đơn</th>
-              <th>Khách hàng</th>
-              <th>SĐT / Địa chỉ</th>
-              <th>Tổng tiền</th>
-              <th>PT Thanh toán</th>
-              <th>Cập nhật trạng thái</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Button size="small" onClick={() => fetchOrders && fetchOrders(orderFilter)} sx={{ fontSize: 12.5, fontWeight: 700 }}>
+          Làm mới danh sách
+        </Button>
+      </Paper>
+
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Mã đơn</TableCell>
+              <TableCell>Khách hàng</TableCell>
+              <TableCell>SĐT / Địa chỉ</TableCell>
+              <TableCell>Tổng tiền</TableCell>
+              <TableCell>PT Thanh toán</TableCell>
+              <TableCell>Cập nhật trạng thái</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {displayedOrders.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
-                  {orderFilter ? `Không có đơn hàng nào ở trạng thái này` : 'Không có đơn hàng nào'}
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                  {orderFilter ? 'Không có đơn hàng nào ở trạng thái này' : 'Không có đơn hàng nào'}
+                </TableCell>
+              </TableRow>
             ) : (
               displayedOrders.map((ord) => {
                 const statusInfo = getOrderStatusText(ord.order_status);
                 return (
-                  <tr key={ord.order_id}>
-                    <td style={{ fontWeight: 800, color: 'var(--primary)' }}>
-                      {ord.order_code}
-                    </td>
-                    <td>
-                      <strong>{ord.recipient_name || ord.customer_name || 'Khách hàng'}</strong>
-                      <div style={{ fontSize: 11, color: '#6B7280' }}>{ord.email || ord.customer_email || '—'}</div>
-                    </td>
-                    <td style={{ fontSize: 12, maxWidth: 220 }}>
-                      <div style={{ fontWeight: 600, color: '#111827' }}>
-                        {ord.recipient_phone || '—'}
-                      </div>
-                      <div style={{ color: '#4B5563', fontSize: 11.5, marginTop: 2, lineHeight: 1.3 }}>
+                  <TableRow key={ord.order_id} hover>
+                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', py: 1.75 }}>{ord.order_code}</TableCell>
+                    <TableCell>
+                      <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>{ord.recipient_name || ord.customer_name || 'Khách hàng'}</Typography>
+                      <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{ord.email || ord.customer_email || '—'}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 220 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{ord.recipient_phone || '—'}</Typography>
+                      <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mt: 0.25, lineHeight: 1.3 }}>
                         {ord.shipping_address || ord.street_address || 'Chưa cập nhật địa chỉ'}
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 800 }}>{formatPrice(ord.total_amount)}</td>
-                    <td>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', backgroundColor: '#F3F4F6', borderRadius: 4 }}>
-                        {ord.payment_method ? ord.payment_method.toUpperCase() : 'COD'}
-                      </span>
-                    </td>
-                    <td>
-                      <select
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>{formatPrice(ord.total_amount)}</TableCell>
+                    <TableCell>
+                      <Chip label={ord.payment_method ? ord.payment_method.toUpperCase() : 'COD'} size="small" sx={{ fontSize: 11, fontWeight: 700, bgcolor: '#F3F4F6', height: 22 }} />
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        size="small"
                         value={ord.order_status}
                         onChange={(e) => handleUpdateStatus(ord.order_id, e.target.value)}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: 6,
-                          border: `1px solid ${statusInfo.color}40`,
+                        sx={{
                           fontSize: 12,
                           fontWeight: 700,
-                          backgroundColor: statusInfo.bg,
+                          bgcolor: statusInfo.bg,
                           color: statusInfo.color,
-                          cursor: 'pointer',
-                          outline: 'none',
+                          '& .MuiSelect-select': { py: 0.6, px: 1.25 },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: `${statusInfo.color}40` },
                         }}
                       >
-                        <option value="pending">Chờ xác nhận</option>
-                        <option value="confirmed">Đã xác nhận</option>
-                        <option value="processing">Đang xử lý</option>
-                        <option value="shipping">Đang giao hàng</option>
-                        <option value="completed">Đã hoàn thành</option>
-                        <option value="cancelled">Hủy đơn</option>
-                        <option value="refunded">Đã hoàn tiền</option>
-                      </select>
-                    </td>
-                  </tr>
+                        {ORDER_STATUS_OPTIONS.map((opt) => (
+                          <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: 12.5 }}>{opt.label}</MenuItem>
+                        ))}
+                      </Select>
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 }

@@ -1,4 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+
+import CloseIcon from '@mui/icons-material/Close';
+
 import ImageUploadField from '../../components/common/ImageUploadField';
 
 export default function EditProductModal({
@@ -18,7 +33,6 @@ export default function EditProductModal({
   const [status, setStatus] = useState('active');
   const [submitting, setSubmitting] = useState(false);
 
-  // Sync form state when editingProduct changes
   useEffect(() => {
     if (editingProduct) {
       setName(editingProduct.product_name || '');
@@ -30,246 +44,122 @@ export default function EditProductModal({
     }
   }, [editingProduct]);
 
-  if (!editingProduct) return null;
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
-
+    if (!name.trim() || !editingProduct) return;
     setSubmitting(true);
     try {
-      const payload = {
+      await handleUpdateProduct(editingProduct.product_id, {
         product_name: name.trim(),
         category_id: categoryId ? parseInt(categoryId) : null,
         brand_id: brandId ? parseInt(brandId) : null,
         description: description.trim(),
         thumbnail_url: thumbnailUrl.trim(),
         status,
-      };
-
-      await handleUpdateProduct(editingProduct.product_id, payload);
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={() => setEditingProduct(null)}>
-      <div
-        className="modal-card"
-        style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                color: '#2563EB',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icons.Edit size={18} />
-            </div>
-            <div>
-              <h3 className="modal-title" style={{ margin: 0, fontSize: 16 }}>
-                Chỉnh sửa thông tin sản phẩm
-              </h3>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                ID: #{editingProduct.product_id} • {editingProduct.product_name}
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setEditingProduct(null)}
-            style={{ color: 'var(--text-muted)', cursor: 'pointer', background: 'none', border: 'none' }}
-          >
-            <Icons.X size={20} />
-          </button>
-        </div>
+    <Dialog open={Boolean(editingProduct)} onClose={() => setEditingProduct(null)} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={1.25}>
+          <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {Icons?.Edit && <Icons.Edit size={18} />}
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Chỉnh sửa thông tin sản phẩm</Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+              ID: #{editingProduct?.product_id} • {editingProduct?.product_name}
+            </Typography>
+          </Box>
+        </Stack>
+        <IconButton size="small" onClick={() => setEditingProduct(null)}><CloseIcon /></IconButton>
+      </DialogTitle>
 
-        <div className="modal-body">
-          <form onSubmit={handleSubmit}>
-            {/* Tên sản phẩm */}
-            <div className="form-group">
-              <label className="form-label">Tên sản phẩm *</label>
-              <input
-                type="text"
-                required
-                className="form-input"
-                placeholder="VD: Chuột Razer DeathAdder V3 Pro"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
+      <Box component="form" onSubmit={handleSubmit}>
+        <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Tên sản phẩm *</Typography>
+            <TextField fullWidth size="small" required placeholder="VD: Chuột Razer DeathAdder V3 Pro" value={name} onChange={(e) => setName(e.target.value)} />
+          </Box>
 
-            {/* Danh mục & Thương hiệu */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div className="form-group">
-                <label className="form-label">Danh mục *</label>
-                <select
-                  className="form-input"
-                  required
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                >
-                  <option value="">-- Chọn danh mục --</option>
-                  {categories.map((c) => (
-                    <option key={c.category_id} value={c.category_id}>
-                      {c.category_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <Box>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Danh mục *</Typography>
+              <Select fullWidth size="small" required displayEmpty value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <MenuItem value="">-- Chọn danh mục --</MenuItem>
+                {categories.map((c) => <MenuItem key={c.category_id} value={String(c.category_id)}>{c.category_name}</MenuItem>)}
+              </Select>
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Thương hiệu *</Typography>
+              <Select fullWidth size="small" required displayEmpty value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+                <MenuItem value="">-- Chọn thương hiệu --</MenuItem>
+                {brands.map((b) => <MenuItem key={b.brand_id} value={String(b.brand_id)}>{b.brand_name}</MenuItem>)}
+              </Select>
+            </Box>
+          </Box>
 
-              <div className="form-group">
-                <label className="form-label">Thương hiệu *</label>
-                <select
-                  className="form-input"
-                  required
-                  value={brandId}
-                  onChange={(e) => setBrandId(e.target.value)}
-                >
-                  <option value="">-- Chọn thương hiệu --</option>
-                  {brands.map((b) => (
-                    <option key={b.brand_id} value={b.brand_id}>
-                      {b.brand_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Trạng thái kinh doanh</Typography>
+            <Select fullWidth size="small" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <MenuItem value="active">Đang kinh doanh (Hiển thị cho khách)</MenuItem>
+              <MenuItem value="inactive">Tạm ngưng bán (Ẩn khỏi trang chủ)</MenuItem>
+              <MenuItem value="archived">Lưu trữ / Đã ngừng kinh doanh</MenuItem>
+            </Select>
+          </Box>
 
-            {/* Trạng thái sản phẩm */}
-            <div className="form-group">
-              <label className="form-label">Trạng thái kinh doanh</label>
-              <select
-                className="form-input"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="active">Đang kinh doanh (Hiển thị cho khách)</option>
-                <option value="inactive">Tạm ngưng bán (Ẩn khỏi trang chủ)</option>
-                <option value="archived">Lưu trữ / Đã ngừng kinh doanh</option>
-              </select>
-            </div>
+          <ImageUploadField
+            label="Ảnh đại diện (Thumbnail - Multer File Upload)"
+            value={thumbnailUrl}
+            onChange={setThumbnailUrl}
+            multiple={false}
+            hint="Chọn ảnh từ máy tính (Multer) hoặc nhập URL"
+          />
 
-            {/* Link ảnh đại diện & Multer Upload */}
-            <ImageUploadField
-              label="Ảnh đại diện (Thumbnail - Multer File Upload)"
-              value={thumbnailUrl}
-              onChange={setThumbnailUrl}
-              multiple={false}
-              hint="Chọn ảnh từ máy tính (Multer) hoặc nhập URL"
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Mô tả sản phẩm</Typography>
+            <TextField
+              fullWidth size="small" multiline rows={4}
+              placeholder="Tính năng nổi bật, thông số kỹ thuật, bảo hành..."
+              value={description} onChange={(e) => setDescription(e.target.value)}
             />
+          </Box>
 
-            {/* Mô tả sản phẩm */}
-            <div className="form-group">
-              <label className="form-label">Mô tả sản phẩm</label>
-              <textarea
-                rows={4}
-                className="form-input"
-                placeholder="Tính năng nổi bật, thông số kỹ thuật, bảo hành..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            {/* Quản lý giá & biến thể banner */}
-            <div
-              style={{
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: 8,
-                padding: '12px 14px',
-                marginTop: 10,
-                marginBottom: 16,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
-                  Giá bán & Kho hàng (Biến thể)
-                </div>
-                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                  Giá bán và tồn kho được quản lý chi tiết trong tab "Biến thể sản phẩm".
-                </div>
-              </div>
-              {onManageVariants && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const id = editingProduct.product_id;
-                    setEditingProduct(null);
-                    onManageVariants(id);
-                  }}
-                  style={{
-                    backgroundColor: '#EFF6FF',
-                    color: '#2563EB',
-                    border: '1px solid #BFDBFE',
-                    borderRadius: 6,
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Sửa giá & kho →
-                </button>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button
-                type="submit"
-                disabled={submitting}
-                style={{
-                  flex: 1,
-                  backgroundColor: 'var(--primary)',
-                  color: '#FFFFFF',
-                  padding: '12px',
-                  borderRadius: 6,
-                  fontWeight: 800,
-                  fontSize: 14,
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  opacity: submitting ? 0.7 : 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5} sx={{ p: 1.5, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+            <Box>
+              <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Giá bán & Kho hàng (Biến thể)</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25 }}>
+                Giá bán và tồn kho được quản lý chi tiết trong tab "Biến thể sản phẩm".
+              </Typography>
+            </Box>
+            {onManageVariants && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const id = editingProduct.product_id;
+                  setEditingProduct(null);
+                  onManageVariants(id);
                 }}
+                sx={{ whiteSpace: 'nowrap', bgcolor: '#EFF6FF', borderColor: '#BFDBFE', color: '#2563EB' }}
               >
-                {submitting ? 'Đang lưu thay đổi...' : 'Lưu thay đổi'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingProduct(null)}
-                style={{
-                  padding: '12px 20px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border-light)',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  backgroundColor: '#FFFFFF',
-                }}
-              >
-                Hủy
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+                Sửa giá & kho →
+              </Button>
+            )}
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button variant="outlined" color="inherit" onClick={() => setEditingProduct(null)}>Hủy</Button>
+          <Button type="submit" variant="contained" disabled={submitting}>
+            {submitting ? 'Đang lưu thay đổi...' : 'Lưu thay đổi'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }

@@ -1,8 +1,26 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+
+import AddIcon from '@mui/icons-material/Add';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+
 import { brandApi } from '../../api/categoryApi';
 import { useToast } from '../../context/ToastContext';
 
-export default function BrandsTab({ brands, fetchBrands, isAdmin, Icons }) {
+export default function BrandsTab({ brands, fetchBrands, isAdmin }) {
   const toast = useToast();
   const [newBrandName, setNewBrandName] = useState('');
   const [newLogoUrl, setNewLogoUrl] = useState('');
@@ -10,17 +28,13 @@ export default function BrandsTab({ brands, fetchBrands, isAdmin, Icons }) {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!newBrandName.trim()) {
-      toast.warning('Vui lòng nhập tên thương hiệu');
-      return;
-    }
+    if (!newBrandName.trim()) return toast.warning('Vui lòng nhập tên thương hiệu');
     setSubmitting(true);
     try {
-      const payload = {
+      const res = await brandApi.createBrand({
         brand_name: newBrandName.trim(),
         logo_url: newLogoUrl.trim() || null,
-      };
-      const res = await brandApi.createBrand(payload);
+      });
       if (res.success) {
         toast.success(`Đã thêm thương hiệu "${newBrandName.trim()}"!`);
         setNewBrandName('');
@@ -48,138 +62,93 @@ export default function BrandsTab({ brands, fetchBrands, isAdmin, Icons }) {
   };
 
   return (
-    <div>
-      {/* Create Brand Card */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 8,
-          padding: 20,
-          border: '1px solid var(--border-light)',
-          marginBottom: 20,
-        }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icons.Tag size={18} style={{ color: 'var(--primary)' }} />
-          Thêm thương hiệu mới (Brands)
-        </h3>
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label className="form-label">Tên thương hiệu *</label>
-            <input
-              type="text"
+    <Box>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, borderRadius: 2, border: '1px solid #E5E7EB' }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <LocalOfferIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+          <Typography sx={{ fontSize: 15, fontWeight: 800 }}>Thêm thương hiệu mới (Brands)</Typography>
+        </Stack>
+
+        <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Tên thương hiệu *</Typography>
+            <TextField
+              fullWidth
+              size="small"
               required
-              className="form-input"
               placeholder="VD: Logitech G, Razer, Corsair, Asus ROG..."
               value={newBrandName}
               onChange={(e) => setNewBrandName(e.target.value)}
             />
-          </div>
+          </Box>
 
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label className="form-label">Logo URL (Tùy chọn)</label>
-            <input
+          <Box sx={{ flex: 1, minWidth: 240 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Logo URL (Tùy chọn)</Typography>
+            <TextField
+              fullWidth
+              size="small"
               type="url"
-              className="form-input"
               placeholder="https://..."
               value={newLogoUrl}
               onChange={(e) => setNewLogoUrl(e.target.value)}
             />
-          </div>
+          </Box>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{
-              backgroundColor: 'var(--primary)',
-              color: '#FFFFFF',
-              padding: '10px 20px',
-              borderRadius: 6,
-              fontWeight: 700,
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <Icons.Plus size={16} />
+          <Button type="submit" variant="contained" disabled={submitting} startIcon={<AddIcon />} sx={{ height: 40 }}>
             {submitting ? 'Đang tạo...' : 'Thêm thương hiệu'}
-          </button>
-        </form>
-      </div>
+          </Button>
+        </Box>
+      </Paper>
 
-      {/* Brands Table */}
-      <div className="data-table-card">
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: 15 }}>
-            Danh sách thương hiệu ({brands.length})
-          </div>
-          <button
-            onClick={fetchBrands}
-            style={{ fontSize: 12.5, color: 'var(--primary)', fontWeight: 700 }}
-          >
-            Làm mới
-          </button>
-        </div>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB' }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 15 }}>Danh sách thương hiệu ({brands.length})</Typography>
+          <Button size="small" onClick={fetchBrands} sx={{ fontSize: 12.5, fontWeight: 700 }}>Làm mới</Button>
+        </Stack>
 
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Logo</th>
-              <th>Tên thương hiệu</th>
-              <th>Số sản phẩm</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>ID</TableCell>
+              <TableCell>Logo</TableCell>
+              <TableCell>Tên thương hiệu</TableCell>
+              <TableCell>Slug</TableCell>
+              <TableCell>Số sản phẩm</TableCell>
+              <TableCell>Thao tác</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {brands.length === 0 ? (
-              <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#6B7280' }}>
-                  Chưa có thương hiệu nào
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có thương hiệu nào</TableCell>
+              </TableRow>
             ) : (
               brands.map((b) => (
-                <tr key={b.brand_id}>
-                  <td style={{ fontWeight: 700, color: '#6B7280' }}>#{b.brand_id}</td>
-                  <td>
+                <TableRow key={b.brand_id} hover>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.secondary', py: 1.5 }}>#{b.brand_id}</TableCell>
+                  <TableCell>
                     {b.logo_url ? (
-                      <img
-                        src={b.logo_url}
-                        alt={b.brand_name}
-                        style={{ height: 28, maxWidth: 60, objectFit: 'contain' }}
-                      />
+                      <Box component="img" src={b.logo_url} alt={b.brand_name} sx={{ height: 28, maxWidth: 60, objectFit: 'contain' }} />
                     ) : (
-                      <span style={{ fontSize: 11, color: '#9CA3AF' }}>Không có</span>
+                      <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>Không có</Typography>
                     )}
-                  </td>
-                  <td style={{ fontWeight: 800, color: '#111827' }}>
-                    {b.brand_name}
-                  </td>
-                  <td style={{ fontSize: 12, color: '#6B7280', fontFamily: 'monospace' }}>
-                    {b.slug}
-                  </td>
-                  <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                    {b.product_count ?? 0}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>{b.brand_name}</TableCell>
+                  <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontFamily: 'monospace' }}>{b.slug}</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{b.product_count ?? 0}</TableCell>
+                  <TableCell>
                     {isAdmin && (
-                      <button
-                        onClick={() => handleDelete(b.brand_id, b.brand_name)}
-                        style={{ color: '#EF4444', padding: 4 }}
-                        title="Xóa thương hiệu"
-                      >
-                        <Icons.Trash2 size={16} />
-                      </button>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(b.brand_id, b.brand_name)}>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 }
