@@ -236,85 +236,102 @@ async function getInventoryTransactions(req, res, next) {
   }
 }
 
-// [POST] /api/inventory/import (Nhập hàng vào kho)
+// [POST] /api/inventory/import (Nhập hàng vào kho - Hỗ trợ nhiều mặt hàng)
 async function importStock(req, res, next) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
     const {
-      variant_id,
-      quantity,
-      unit_cost,
       supplier_id,
       note,
       transaction_type = 'purchase',
     } = req.body;
 
-    const parsedQty = parseInt(quantity, 10);
-    if (!variant_id || isNaN(parsedQty) || parsedQty <= 0) {
+    // Hỗ trợ cả mảng items lẫn mặt hàng đơn lẻ
+    const rawItems = Array.isArray(req.body.items) && req.body.items.length > 0
+      ? req.body.items
+      : [{
+          variant_id: req.body.variant_id,
+          quantity: req.body.quantity,
+          unit_cost: req.body.unit_cost,
+        }];
+
+    if (!rawItems || rawItems.length === 0) {
       await connection.rollback();
-      return errorResponse(res, 'Vui lòng chọn biến thể và số lượng nhập lớn hơn 0', 400);
+      return errorResponse(res, 'Vui lòng cung cấp danh sách mặt hàng cần nhập', 400);
     }
 
-    // Lock variant row for update
-    const [variants] = await connection.query(
-      `SELECT pv.*, p.product_name 
-       FROM product_variants pv 
-       JOIN products p ON pv.product_id = p.product_id 
-       WHERE pv.variant_id = ? FOR UPDATE`,
-      [variant_id]
-    );
-
-    if (variants.length === 0) {
-      await connection.rollback();
-      return errorResponse(res, 'Phiên bản sản phẩm không tồn tại', 404);
-    }
-
-    const currentStock = variants[0].stock;
-    const newStock = currentStock + parsedQty;
     const userId = req.user?.user_id || null;
+    let totalQty = 0;
+    let totalCost = 0;
+    const processedItems = [];
 
-    // 1. Update stock
-    await connection.query(
-      'UPDATE product_variants SET stock = ? WHERE variant_id = ?',
-      [newStock, variant_id]
-    );
-
-    // 2. Insert inventory transaction
-    const finalNote = note?.trim() || `Nhập kho ${parsedQty} sản phẩm`;
-    const [txResult] = await connection.query(
-      `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after, note)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [variant_id, userId, transaction_type, parsedQty, newStock, finalNote]
-    );
-
-    // 3. Optional: Create purchase order if supplier provided
+    // Tạo purchase_order nếu có supplier_id
     let purchaseOrderId = null;
     if (supplier_id) {
-      const parsedCost = parseFloat(unit_cost) || 0;
-      const subtotal = parsedQty * parsedCost;
       const pCode = `PO-${Date.now().toString().slice(-6)}`;
-
       const [poResult] = await connection.query(
         `INSERT INTO purchase_orders (supplier_id, created_by, purchase_code, status, subtotal)
-         VALUES (?, ?, ?, 'received', ?)`,
-        [supplier_id, userId, pCode, subtotal]
+         VALUES (?, ?, ?, 'received', 0)`,
+        [supplier_id, userId, pCode]
       );
       purchaseOrderId = poResult.insertId;
-
-      await connection.query(
-        `INSERT INTO purchase_order_items (purchase_order_id, variant_id, quantity_ordered, quantity_received, unit_cost)
-         VALUES (?, ?, ?, ?, ?)`,
-        [purchaseOrderId, variant_id, parsedQty, parsedQty, parsedCost]
-      );
     }
 
-    await connection.commit();
+    for (const item of rawItems) {
+      const variant_id = item.variant_id;
+      const parsedQty = parseInt(item.quantity, 10);
+      const parsedCost = parseFloat(item.unit_cost) || 0;
 
-    return successResponse(
-      res,
-      {
+      if (!variant_id || isNaN(parsedQty) || parsedQty <= 0) {
+        await connection.rollback();
+        return errorResponse(res, `Số lượng nhập cho biến thể #${variant_id || 'chưa chọn'} phải lớn hơn 0`, 400);
+      }
+
+      // Lock variant row for update
+      const [variants] = await connection.query(
+        `SELECT pv.*, p.product_name 
+         FROM product_variants pv 
+         JOIN products p ON pv.product_id = p.product_id 
+         WHERE pv.variant_id = ? FOR UPDATE`,
+        [variant_id]
+      );
+
+      if (variants.length === 0) {
+        await connection.rollback();
+        return errorResponse(res, `Phiên bản sản phẩm #${variant_id} không tồn tại`, 404);
+      }
+
+      const currentStock = variants[0].stock;
+      const newStock = currentStock + parsedQty;
+
+      // 1. Update stock
+      await connection.query(
+        'UPDATE product_variants SET stock = ? WHERE variant_id = ?',
+        [newStock, variant_id]
+      );
+
+      // 2. Insert transaction
+      const itemNote = note?.trim() || `Nhập kho ${parsedQty} sản phẩm`;
+      const [txResult] = await connection.query(
+        `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after, note)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [variant_id, userId, transaction_type, parsedQty, newStock, itemNote]
+      );
+
+      // 3. Purchase order items
+      if (purchaseOrderId) {
+        await connection.query(
+          `INSERT INTO purchase_order_items (purchase_order_id, variant_id, quantity_ordered, quantity_received, unit_cost)
+           VALUES (?, ?, ?, ?, ?)`,
+          [purchaseOrderId, variant_id, parsedQty, parsedQty, parsedCost]
+        );
+        totalCost += parsedQty * parsedCost;
+      }
+
+      totalQty += parsedQty;
+      processedItems.push({
         transaction_id: txResult.insertId,
         variant_id,
         product_name: variants[0].product_name,
@@ -323,9 +340,143 @@ async function importStock(req, res, next) {
         quantity_imported: parsedQty,
         stock_before: currentStock,
         stock_after: newStock,
+      });
+    }
+
+    // Update total subtotal in purchase_orders if created
+    if (purchaseOrderId && totalCost > 0) {
+      await connection.query(
+        'UPDATE purchase_orders SET subtotal = ? WHERE purchase_order_id = ?',
+        [totalCost, purchaseOrderId]
+      );
+    }
+
+    await connection.commit();
+
+    return successResponse(
+      res,
+      {
+        total_items: processedItems.length,
+        total_quantity: totalQty,
         purchase_order_id: purchaseOrderId,
+        items: processedItems,
       },
-      `Nhập kho thành công ${parsedQty} sản phẩm! Tồn kho mới: ${newStock}`,
+      `Nhập kho thành công ${totalQty} sản phẩm (${processedItems.length} mặt hàng)!`,
+      201
+    );
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+}
+
+// [POST] /api/inventory/export (Xuất kho / Xuất thêm - Hỗ trợ nhiều mặt hàng)
+async function exportStock(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const {
+      transaction_type = 'adjustment',
+      reason,
+      note,
+    } = req.body;
+
+    const rawItems = Array.isArray(req.body.items) && req.body.items.length > 0
+      ? req.body.items
+      : [{
+          variant_id: req.body.variant_id,
+          quantity: req.body.quantity,
+        }];
+
+    if (!rawItems || rawItems.length === 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Vui lòng cung cấp danh sách mặt hàng cần xuất', 400);
+    }
+
+    const validTypes = ['adjustment', 'damage', 'sale'];
+    const finalType = validTypes.includes(transaction_type) ? transaction_type : 'adjustment';
+    const userId = req.user?.user_id || null;
+    let totalQty = 0;
+    const processedItems = [];
+
+    for (const item of rawItems) {
+      const variant_id = item.variant_id;
+      const parsedQty = parseInt(item.quantity, 10);
+
+      if (!variant_id || isNaN(parsedQty) || parsedQty <= 0) {
+        await connection.rollback();
+        return errorResponse(res, `Số lượng xuất cho biến thể #${variant_id || 'chưa chọn'} phải lớn hơn 0`, 400);
+      }
+
+      // Lock variant row
+      const [variants] = await connection.query(
+        `SELECT pv.*, p.product_name 
+         FROM product_variants pv 
+         JOIN products p ON pv.product_id = p.product_id 
+         WHERE pv.variant_id = ? FOR UPDATE`,
+        [variant_id]
+      );
+
+      if (variants.length === 0) {
+        await connection.rollback();
+        return errorResponse(res, `Phiên bản sản phẩm #${variant_id} không tồn tại`, 404);
+      }
+
+      const currentStock = variants[0].stock;
+      if (currentStock < parsedQty) {
+        await connection.rollback();
+        return errorResponse(
+          res,
+          `Mặt hàng "${variants[0].product_name} - ${variants[0].variant_name}" (SKU: ${variants[0].sku}) chỉ còn ${currentStock} chiếc trong kho, không đủ để xuất ${parsedQty} chiếc!`,
+          400
+        );
+      }
+
+      const newStock = currentStock - parsedQty;
+
+      // 1. Update stock
+      await connection.query(
+        'UPDATE product_variants SET stock = ? WHERE variant_id = ?',
+        [newStock, variant_id]
+      );
+
+      // 2. Insert transaction with negative delta
+      const reasonText = reason || note || 'Xuất kho điều chỉnh';
+      const itemNote = `Xuất ${parsedQty} sản phẩm: ${reasonText}`;
+      const [txResult] = await connection.query(
+        `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after, note)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [variant_id, userId, finalType, -parsedQty, newStock, itemNote]
+      );
+
+      totalQty += parsedQty;
+      processedItems.push({
+        transaction_id: txResult.insertId,
+        variant_id,
+        product_name: variants[0].product_name,
+        variant_name: variants[0].variant_name,
+        sku: variants[0].sku,
+        quantity_exported: parsedQty,
+        stock_before: currentStock,
+        stock_after: newStock,
+        transaction_type: finalType,
+      });
+    }
+
+    await connection.commit();
+
+    return successResponse(
+      res,
+      {
+        total_items: processedItems.length,
+        total_quantity: totalQty,
+        transaction_type: finalType,
+        items: processedItems,
+      },
+      `Xuất kho thành công ${totalQty} sản phẩm (${processedItems.length} mặt hàng)!`,
       201
     );
   } catch (error) {

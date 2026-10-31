@@ -217,10 +217,112 @@ async function deleteReview(req, res, next) {
   }
 }
 
+// [GET] /api/reviews (Admin & Staff)
+async function getAllReviewsAdmin(req, res, next) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
+    const offset = (page - 1) * limit;
+    const { rating, search } = req.query;
+
+    const conditions = ['1=1'];
+    const params = [];
+
+    if (rating && !isNaN(rating)) {
+      conditions.push('r.rating = ?');
+      params.push(parseInt(rating));
+    }
+
+    if (search && search.trim()) {
+      const term = `%${search.trim()}%`;
+      conditions.push('(p.product_name LIKE ? OR u.full_name LIKE ? OR u.email LIKE ? OR r.content LIKE ?)');
+      params.push(term, term, term, term);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // 1. Thống kê tổng quan đánh giá
+    const [summaryRows] = await pool.query(`
+      SELECT 
+        COUNT(*) AS total_reviews,
+        COALESCE(AVG(rating), 5.0) AS avg_rating,
+        SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) AS count_5_star,
+        SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS count_4_star,
+        SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS count_3_star,
+        SUM(CASE WHEN rating <= 2 THEN 1 ELSE 0 END) AS count_low_star
+      FROM reviews
+    `);
+
+    const summary = summaryRows[0] || {
+      total_reviews: 0,
+      avg_rating: 5.0,
+      count_5_star: 0,
+      count_4_star: 0,
+      count_3_star: 0,
+      count_low_star: 0,
+    };
+
+    // 2. Đếm số lượng theo bộ lọc
+    const [countRows] = await pool.query(`
+      SELECT COUNT(*) AS total
+      FROM reviews r
+      JOIN users u ON r.user_id = u.user_id
+      JOIN products p ON r.product_id = p.product_id
+      WHERE ${whereClause}
+    `, params);
+
+    const total = countRows[0]?.total || 0;
+
+    // 3. Lấy danh sách đánh giá phân trang
+    const queryParams = [...params, limit, offset];
+    const [items] = await pool.query(`
+      SELECT 
+        r.review_id,
+        r.product_id,
+        r.user_id,
+        r.order_item_id,
+        r.rating,
+        r.content,
+        r.created_at,
+        p.product_name,
+        p.thumbnail_url,
+        u.full_name,
+        u.email
+      FROM reviews r
+      JOIN users u ON r.user_id = u.user_id
+      JOIN products p ON r.product_id = p.product_id
+      WHERE ${whereClause}
+      ORDER BY r.created_at DESC
+      LIMIT ? OFFSET ?
+    `, queryParams);
+
+    return successResponse(res, {
+      items,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      summary: {
+        total_reviews: Number(summary.total_reviews) || 0,
+        avg_rating: Number(summary.avg_rating) || 5.0,
+        count_5_star: Number(summary.count_5_star) || 0,
+        count_4_star: Number(summary.count_4_star) || 0,
+        count_3_star: Number(summary.count_3_star) || 0,
+        count_low_star: Number(summary.count_low_star) || 0,
+      }
+    }, 'Danh sách đánh giá sản phẩm (Admin)');
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getProductReviews,
   checkEligibility,
   createReview,
-  deleteReview
+  deleteReview,
+  getAllReviewsAdmin
 };
 

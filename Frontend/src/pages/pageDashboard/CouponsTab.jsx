@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -23,6 +23,8 @@ import TableRow from '@mui/material/TableRow';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/Delete';
+
+import AdminPagination from '../../components/common/AdminPagination';
 
 export default function CouponsTab({
   coupons = [],
@@ -53,6 +55,15 @@ export default function CouponsTab({
   const [editStart, setEditStart] = useState('');
   const [editEnd, setEditEnd] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const paginatedCoupons = useMemo(() => {
+    const start = page * rowsPerPage;
+    return coupons.slice(start, start + rowsPerPage);
+  }, [coupons, page, rowsPerPage]);
 
   const toInputDate = (val) => {
     if (!val) return '';
@@ -191,17 +202,17 @@ export default function CouponsTab({
         </Box>
       </Dialog>
 
-      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Mã giảm giá</TableCell>
-              <TableCell>Loại & Giá trị</TableCell>
-              <TableCell>Lượt sử dụng</TableCell>
-              <TableCell>Thời gian hiệu lực</TableCell>
-              <TableCell>Trạng thái</TableCell>
-              <TableCell>Ngày tạo</TableCell>
-              <TableCell>Thao tác</TableCell>
+            <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Mã giảm giá</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Loại & Giá trị</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Lượt sử dụng</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Thời gian hiệu lực</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Trạng thái</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Ngày tạo</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Thao tác</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -210,7 +221,7 @@ export default function CouponsTab({
                 <TableCell colSpan={7} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có mã giảm giá nào</TableCell>
               </TableRow>
             ) : (
-              coupons.map((cpn) => {
+              paginatedCoupons.map((cpn) => {
                 const status = getCouponStatus(cpn);
                 const startDateStr = formatShortDate(cpn.start_date);
                 const endDateStr = formatShortDate(cpn.end_date);
@@ -262,6 +273,19 @@ export default function CouponsTab({
             )}
           </TableBody>
         </Table>
+
+        {coupons.length > 0 && (
+          <AdminPagination
+            count={coupons.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+          />
+        )}
       </TableContainer>
     </Box>
   );

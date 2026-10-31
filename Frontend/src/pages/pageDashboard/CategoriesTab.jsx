@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -21,12 +21,22 @@ import DeleteOutlineIcon from '@mui/icons-material/Delete';
 
 import { categoryApi } from '../../api/categoryApi';
 import { useToast } from '../../context/ToastContext';
+import AdminPagination from '../../components/common/AdminPagination';
 
-export default function CategoriesTab({ categories, fetchCategories, isAdmin, Icons }) {
+export default function CategoriesTab({ categories = [], fetchCategories, isAdmin, Icons }) {
   const toast = useToast();
   const [newCatName, setNewCatName] = useState('');
   const [newParentId, setNewParentId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const paginatedCategories = useMemo(() => {
+    const start = page * rowsPerPage;
+    return categories.slice(start, start + rowsPerPage);
+  }, [categories, page, rowsPerPage]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -100,21 +110,21 @@ export default function CategoriesTab({ categories, fetchCategories, isAdmin, Ic
         </Box>
       </Paper>
 
-      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB' }}>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB', bgcolor: '#FFFFFF' }}>
           <Typography sx={{ fontWeight: 800, fontSize: 15 }}>Danh sách danh mục ({categories.length})</Typography>
           <Button size="small" onClick={fetchCategories} sx={{ fontSize: 12.5, fontWeight: 700 }}>Làm mới</Button>
         </Stack>
 
         <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Tên danh mục</TableCell>
-              <TableCell>Slug / Đường dẫn</TableCell>
-              <TableCell>Danh mục cha</TableCell>
-              <TableCell>Số sản phẩm</TableCell>
-              <TableCell>Thao tác</TableCell>
+            <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>ID</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tên danh mục</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Slug / Đường dẫn</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Danh mục cha</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Số sản phẩm</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Thao tác</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -123,7 +133,7 @@ export default function CategoriesTab({ categories, fetchCategories, isAdmin, Ic
                 <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có danh mục nào</TableCell>
               </TableRow>
             ) : (
-              categories.map((cat) => {
+              paginatedCategories.map((cat) => {
                 const parent = categories.find((c) => c.category_id === cat.parent_id);
                 return (
                   <TableRow key={cat.category_id} hover>
@@ -151,6 +161,19 @@ export default function CategoriesTab({ categories, fetchCategories, isAdmin, Ic
             )}
           </TableBody>
         </Table>
+
+        {categories.length > 0 && (
+          <AdminPagination
+            count={categories.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+          />
+        )}
       </TableContainer>
     </Box>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -14,6 +14,8 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 
+import AdminPagination from '../../components/common/AdminPagination';
+
 const ORDER_STATUS_OPTIONS = [
   { value: 'pending', label: 'Chờ xác nhận' },
   { value: 'confirmed', label: 'Đã xác nhận' },
@@ -24,12 +26,35 @@ const ORDER_STATUS_OPTIONS = [
   { value: 'refunded', label: 'Đã hoàn tiền' },
 ];
 
-export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOrders, handleUpdateStatus, formatPrice, getOrderStatusText }) {
-  const displayedOrders = orderFilter ? orders.filter((ord) => ord.order_status === orderFilter) : orders;
+export default function OrdersTab({
+  orders = [],
+  orderFilter,
+  setOrderFilter,
+  fetchOrders,
+  handleUpdateStatus,
+  formatPrice,
+  getOrderStatusText,
+}) {
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const displayedOrders = useMemo(() => {
+    return orderFilter ? orders.filter((ord) => ord.order_status === orderFilter) : orders;
+  }, [orders, orderFilter]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [orderFilter]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = page * rowsPerPage;
+    return displayedOrders.slice(start, start + rowsPerPage);
+  }, [displayedOrders, page, rowsPerPage]);
 
   const handleFilterChange = (e) => {
     const val = e.target.value;
     setOrderFilter(val);
+    setPage(0);
     if (typeof fetchOrders === 'function') fetchOrders(val);
   };
 
@@ -54,16 +79,16 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
         </Button>
       </Paper>
 
-      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Mã đơn</TableCell>
-              <TableCell>Khách hàng</TableCell>
-              <TableCell>SĐT / Địa chỉ</TableCell>
-              <TableCell>Tổng tiền</TableCell>
-              <TableCell>PT Thanh toán</TableCell>
-              <TableCell>Cập nhật trạng thái</TableCell>
+            <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Mã đơn</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Khách hàng</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>SĐT / Địa chỉ</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tổng tiền</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>PT Thanh toán</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Cập nhật trạng thái</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -74,7 +99,7 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
                 </TableCell>
               </TableRow>
             ) : (
-              displayedOrders.map((ord) => {
+              paginatedOrders.map((ord) => {
                 const statusInfo = getOrderStatusText(ord.order_status);
                 return (
                   <TableRow key={ord.order_id} hover>
@@ -118,6 +143,19 @@ export default function OrdersTab({ orders, orderFilter, setOrderFilter, fetchOr
             )}
           </TableBody>
         </Table>
+
+        {displayedOrders.length > 0 && (
+          <AdminPagination
+            count={displayedOrders.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+          />
+        )}
       </TableContainer>
     </Box>
   );

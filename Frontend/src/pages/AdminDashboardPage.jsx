@@ -35,6 +35,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -54,15 +55,74 @@ import BrandsTab from './pageDashboard/BrandsTab';
 import VariantsTab from './pageDashboard/VariantsTab';
 import InventoryTab from './pageDashboard/InventoryTab';
 import UsersTab from './pageDashboard/UsersTab';
+import ReviewsTab from './pageDashboard/ReviewsTab';
 import AddProductModal from './pageDashboard/AddProductModal';
 import EditProductModal from './pageDashboard/EditProductModal';
 
-export const AdminDashboardPage = ({ onNavigate }) => {
+const PATH_TO_TAB = {
+  '': 'stats',
+  'dashboard': 'stats',
+  'stats': 'stats',
+  'order': 'orders',
+  'orders': 'orders',
+  'product': 'products',
+  'products': 'products',
+  'variant': 'variants',
+  'variants': 'variants',
+  'category': 'categories',
+  'categories': 'categories',
+  'brand': 'brands',
+  'brands': 'brands',
+  'coupon': 'coupons',
+  'coupons': 'coupons',
+  'inventory': 'inventory',
+  'user': 'users',
+  'users': 'users',
+  'review': 'reviews',
+  'reviews': 'reviews',
+};
+
+const TAB_TO_PATH = {
+  stats: 'admin/dashboard',
+  orders: 'admin/order',
+  products: 'admin/product',
+  variants: 'admin/variants',
+  categories: 'admin/category',
+  brands: 'admin/brand',
+  coupons: 'admin/coupon',
+  inventory: 'admin/inventory',
+  users: 'admin/user',
+  reviews: 'admin/reviews',
+};
+
+export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
   const { user, isStaff, isAdmin } = useAuth();
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState('stats');
-  const [productsMenuOpen, setProductsMenuOpen] = useState(true);
+  const initialTab = PATH_TO_TAB[currentTab?.toLowerCase()] || 'stats';
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [productsMenuOpen, setProductsMenuOpen] = useState(
+    ['products', 'variants', 'categories'].includes(initialTab)
+  );
+
+  useEffect(() => {
+    const tabFromUrl = PATH_TO_TAB[currentTab?.toLowerCase()] || 'stats';
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+      if (['products', 'variants', 'categories'].includes(tabFromUrl)) {
+        setProductsMenuOpen(true);
+      }
+    }
+  }, [currentTab]);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    if (['products', 'variants', 'categories'].includes(tabId)) {
+      setProductsMenuOpen(true);
+    }
+    const path = TAB_TO_PATH[tabId] || 'admin/dashboard';
+    onNavigate(path);
+  };
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -157,18 +217,25 @@ export const AdminDashboardPage = ({ onNavigate }) => {
 
   useEffect(() => {
     if (!isStaff) return;
-    fetchStats();
-    fetchCategories();
-    fetchBrands();
-  }, [isStaff, fetchStats, fetchCategories, fetchBrands]);
 
-  useEffect(() => {
-    if (activeTab === 'orders') fetchOrders();
-    if (activeTab === 'products' || activeTab === 'variants') fetchProducts();
-    if (activeTab === 'coupons') fetchCoupons();
-    if (activeTab === 'categories') fetchCategories();
-    if (activeTab === 'brands') fetchBrands();
-  }, [activeTab, fetchOrders, fetchProducts, fetchCoupons, fetchCategories, fetchBrands]);
+    if (activeTab === 'stats') {
+      fetchStats();
+    } else if (activeTab === 'orders') {
+      fetchOrders();
+    } else if (activeTab === 'products') {
+      fetchProducts();
+      if (categories.length === 0) fetchCategories();
+      if (brands.length === 0) fetchBrands();
+    } else if (activeTab === 'variants') {
+      if (products.length === 0) fetchProducts();
+    } else if (activeTab === 'categories') {
+      fetchCategories();
+    } else if (activeTab === 'brands') {
+      fetchBrands();
+    } else if (activeTab === 'coupons') {
+      fetchCoupons();
+    }
+  }, [activeTab, isStaff, fetchStats, fetchOrders, fetchProducts, fetchCategories, fetchBrands, fetchCoupons, categories.length, brands.length, products.length]);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
@@ -253,7 +320,7 @@ export const AdminDashboardPage = ({ onNavigate }) => {
 
   const handleManageVariants = (productId) => {
     setTargetVariantProductId(productId);
-    setActiveTab('variants');
+    handleTabChange('variants');
   };
 
   const handleCreateCoupon = async (e) => {
@@ -346,7 +413,7 @@ export const AdminDashboardPage = ({ onNavigate }) => {
   const renderNavBtn = (id, label, icon, onClickOverride, extra) => {
     const active = activeTab === id;
     return (
-      <ListItemButton key={id} sx={navBtnSx(active)} onClick={onClickOverride || (() => setActiveTab(id))}>
+      <ListItemButton key={id} sx={navBtnSx(active)} onClick={onClickOverride || (() => handleTabChange(id))}>
         {icon && <ListItemIcon>{icon}</ListItemIcon>}
         <ListItemText
           primary={label}
@@ -404,20 +471,20 @@ export const AdminDashboardPage = ({ onNavigate }) => {
             'users',
             'Nhân sự & Khách hàng',
             <PeopleOutlinedIcon sx={{ fontSize: 18 }} />,
-            () => isAdmin ? setActiveTab('users') : toast.warning('Chỉ Quản trị viên (Admin) mới có quyền truy cập mục quản lý nhân sự & phân quyền!'),
+            () => isAdmin ? handleTabChange('users') : toast.warning('Chỉ Quản trị viên (Admin) mới có quyền truy cập mục quản lý nhân sự & phân quyền!'),
             !isAdmin && <Chip label="Admin" size="small" sx={{ height: 18, fontSize: 10, bgcolor: '#F1F5F9', color: '#94A3B8' }} />
           )}
-          {renderNavBtn('chat', 'Khách hàng & Chat', <ChatOutlinedIcon sx={{ fontSize: 18 }} />, () => toast.info('Tin nhắn khách hàng & Đánh giá'))}
+          {renderNavBtn('reviews', 'Đánh giá sản phẩm', <RateReviewOutlinedIcon sx={{ fontSize: 18 }} />)}
           {renderNavBtn('calendar', 'Lịch giao hàng (Calendar)', <CalendarTodayOutlinedIcon sx={{ fontSize: 18 }} />, () => toast.info('Lịch hẹn bảo hành & sự kiện'))}
 
           {renderGroupTitle('SẢN PHẨM & KHO HÀNG')}
           {renderNavBtn('inventory', 'Quản lý Tồn kho', <GridViewOutlinedIcon sx={{ fontSize: 18 }} />)}
 
           <ListItemButton
-            sx={navBtnSx(['products', 'variants'].includes(activeTab))}
+            sx={navBtnSx(['products', 'variants', 'categories'].includes(activeTab))}
             onClick={() => {
               setProductsMenuOpen(!productsMenuOpen);
-              if (!['products', 'variants'].includes(activeTab)) setActiveTab('products');
+              if (!['products', 'variants', 'categories'].includes(activeTab)) handleTabChange('products');
             }}
           >
             <ListItemIcon><DescriptionOutlinedIcon sx={{ fontSize: 18 }} /></ListItemIcon>
@@ -430,12 +497,13 @@ export const AdminDashboardPage = ({ onNavigate }) => {
               {[
                 { id: 'products', label: 'Danh sách sản phẩm' },
                 { id: 'variants', label: 'Phiên bản / Biến thể' },
+                { id: 'categories', label: 'Danh mục sản phẩm' },
               ].map((sub) => {
                 const subActive = activeTab === sub.id;
                 return (
                   <ListItemButton
                     key={sub.id}
-                    onClick={() => setActiveTab(sub.id)}
+                    onClick={() => handleTabChange(sub.id)}
                     sx={{
                       flexGrow: 0,
                       py: 0.75,
@@ -453,7 +521,6 @@ export const AdminDashboardPage = ({ onNavigate }) => {
             </Stack>
           </Collapse>
 
-          {renderNavBtn('categories', 'Danh mục (Categories)', <Inventory2OutlinedIcon sx={{ fontSize: 18 }} />)}
           {renderNavBtn('brands', 'Thương hiệu (Brands)', <StarIcon sx={{ fontSize: 18 }} />)}
           {renderNavBtn('coupons', 'Mã giảm giá (Coupons)', <CreditCardOutlinedIcon sx={{ fontSize: 18 }} />)}
 
@@ -541,6 +608,7 @@ export const AdminDashboardPage = ({ onNavigate }) => {
           )}
           {activeTab === 'inventory' && <InventoryTab Icons={Icons} />}
           {activeTab === 'users' && <UsersTab user={user} isAdmin={isAdmin} toast={toast} Icons={Icons} />}
+          {activeTab === 'reviews' && <ReviewsTab isAdmin={isAdmin} formatPrice={formatPrice} />}
         </Box>
       </Box>
 

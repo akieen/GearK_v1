@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import AdminPagination from '../../components/common/AdminPagination';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -71,6 +72,8 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
   const [selectedProductId, setSelectedProductId] = useState(targetProductId || '');
   const [productDetail, setProductDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSku, setNewSku] = useState('');
@@ -150,7 +153,10 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
   }, [toast]);
 
   useEffect(() => {
-    if (selectedProductId) fetchVariants(selectedProductId);
+    if (selectedProductId) {
+      setPage(0);
+      fetchVariants(selectedProductId);
+    }
   }, [selectedProductId, fetchVariants]);
 
   const refreshManagedVariant = async (variantId) => {
@@ -492,7 +498,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
               {!productDetail?.variants?.length ? (
                 <TableRow><TableCell colSpan={9} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có biến thể nào cho sản phẩm này</TableCell></TableRow>
               ) : (
-                productDetail.variants.map((v) => {
+                (productDetail?.variants || []).slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((v) => {
                   let specsObj = v.specifications;
                   if (typeof specsObj === 'string') {
                     try { specsObj = JSON.parse(specsObj); } catch { specsObj = null; }
@@ -579,6 +585,18 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
               )}
             </TableBody>
           </Table>
+        )}
+        {Boolean(productDetail?.variants?.length) && (
+          <AdminPagination
+            count={productDetail.variants.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+          />
         )}
       </TableContainer>
 

@@ -28,6 +28,16 @@ export const couponApi = {
 };
 
 export const reviewApi = {
+  getAllReviews: (params = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        searchParams.append(key, val);
+      }
+    });
+    const qs = searchParams.toString();
+    return request(`/reviews${qs ? `?${qs}` : ''}`);
+  },
   getProductReviews: (productId) => request(`/reviews/product/${productId}`),
 
   checkEligibility: (productId) => request(`/reviews/check-eligibility/${productId}`),

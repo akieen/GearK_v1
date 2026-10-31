@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -21,11 +21,14 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
+import Divider from '@mui/material/Divider';
 
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import CloseIcon from '@mui/icons-material/Close';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import DeleteOutlineIcon from '@mui/icons-material/Delete';
 
 import { inventoryApi } from '../../api/inventoryApi';
 import { useToast } from '../../context/ToastContext';
@@ -44,6 +47,7 @@ export default function InventoryTab() {
   const [activeSubTab, setActiveSubTab] = useState('items');
 
   const [items, setItems] = useState([]);
+  const [allVariants, setAllVariants] = useState([]);
   const [summary, setSummary] = useState({
     total_variants: 0, total_stock: 0, low_stock_count: 0,
     out_of_stock_count: 0, total_imports: 0, total_exports: 0,
@@ -66,15 +70,18 @@ export default function InventoryTab() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
-  const [importVariantId, setImportVariantId] = useState('');
-  const [importQty, setImportQty] = useState('10');
-  const [importUnitCost, setImportUnitCost] = useState('');
+  // Nhập kho nhiều sản phẩm
+  const [importItems, setImportItems] = useState([
+    { variant_id: '', quantity: '10', unit_cost: '' },
+  ]);
   const [importSupplierId, setImportSupplierId] = useState('');
   const [importNote, setImportNote] = useState('');
   const [submittingImport, setSubmittingImport] = useState(false);
 
-  const [exportVariantId, setExportVariantId] = useState('');
-  const [exportQty, setExportQty] = useState('1');
+  // Xuất kho nhiều sản phẩm
+  const [exportItems, setExportItems] = useState([
+    { variant_id: '', quantity: '1' },
+  ]);
   const [exportType, setExportType] = useState('adjustment');
   const [exportReason, setExportReason] = useState('Kiểm kê / điều chuyển kho');
   const [exportNote, setExportNote] = useState('');
@@ -105,6 +112,17 @@ export default function InventoryTab() {
     }
   }, [itemsPage, searchKeyword, filterLowStock, sortOption, toast]);
 
+  const fetchAllVariants = useCallback(async () => {
+    try {
+      const res = await inventoryApi.getInventory({ limit: 500 });
+      if (res.success && res.data?.items) {
+        setAllVariants(res.data.items);
+      }
+    } catch (err) {
+      console.error('Lỗi tải danh mục biến thể tổng:', err);
+    }
+  }, []);
+
   const fetchTransactions = useCallback(async () => {
     setLoadingTx(true);
     try {
@@ -132,47 +150,106 @@ export default function InventoryTab() {
   }, []);
 
   useEffect(() => { fetchInventory(); }, [fetchInventory]);
+  useEffect(() => { fetchAllVariants(); }, [fetchAllVariants]);
   useEffect(() => { if (activeSubTab === 'history') fetchTransactions(); }, [activeSubTab, fetchTransactions]);
   useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
 
+  // Variant options nguồn cho dropdown (ưu tiên allVariants)
+  const availableVariants = useMemo(() => {
+    return allVariants.length ? allVariants : items;
+  }, [allVariants, items]);
+
+  // === XỬ LÝ NHẬP KHO NHIỀU MẶT HÀNG ===
   const handleOpenImport = (variant = null) => {
-    const target = variant || items[0];
-    if (target) {
-      setImportVariantId(String(target.variant_id));
-      setImportUnitCost(String(Math.round(target.price * 0.75)));
+    if (variant) {
+      setImportItems([{
+        variant_id: String(variant.variant_id),
+        quantity: '10',
+        unit_cost: String(Math.round(variant.price * 0.75)),
+      }]);
+    } else {
+      const first = availableVariants[0];
+      setImportItems([{
+        variant_id: first ? String(first.variant_id) : '',
+        quantity: '10',
+        unit_cost: first ? String(Math.round(first.price * 0.75)) : '',
+      }]);
     }
-    setImportQty('10');
     setImportNote('');
     setShowImportModal(true);
   };
 
-  const handleOpenExport = (variant = null) => {
-    const target = variant || items[0];
-    if (target) setExportVariantId(String(target.variant_id));
-    setExportQty('1');
-    setExportType('adjustment');
-    setExportReason('Kiểm kê / điều chuyển kho');
-    setExportNote('');
-    setShowExportModal(true);
+  const handleAddImportRow = () => {
+    setImportItems((prev) => [
+      ...prev,
+      { variant_id: '', quantity: '10', unit_cost: '' },
+    ]);
   };
+
+  const handleRemoveImportRow = (idx) => {
+    setImportItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateImportRow = (idx, field, value) => {
+    setImportItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        const updated = { ...item, [field]: value };
+        if (field === 'variant_id') {
+          const selectedVar = availableVariants.find((v) => String(v.variant_id) === String(value));
+          if (selectedVar && !item.unit_cost) {
+            updated.unit_cost = String(Math.round(selectedVar.price * 0.75));
+          }
+        }
+        return updated;
+      })
+    );
+  };
+
+  const importSummary = useMemo(() => {
+    let totalQty = 0;
+    let totalCost = 0;
+    importItems.forEach((it) => {
+      const q = parseInt(it.quantity, 10) || 0;
+      const c = parseFloat(it.unit_cost) || 0;
+      totalQty += q;
+      totalCost += q * c;
+    });
+    return { totalQty, totalCost };
+  }, [importItems]);
 
   const handleImportSubmit = async (e) => {
     e.preventDefault();
-    const qty = parseInt(importQty, 10);
-    if (!importVariantId || isNaN(qty) || qty <= 0) return toast.warning('Vui lòng chọn biến thể và nhập số lượng hợp lệ (> 0)');
+    if (!importItems || importItems.length === 0) {
+      return toast.warning('Vui lòng thêm ít nhất một mặt hàng cần nhập');
+    }
+    for (let i = 0; i < importItems.length; i++) {
+      const it = importItems[i];
+      const q = parseInt(it.quantity, 10);
+      if (!it.variant_id) {
+        return toast.warning(`Dòng #${i + 1}: Vui lòng chọn mặt hàng cần nhập`);
+      }
+      if (isNaN(q) || q <= 0) {
+        return toast.warning(`Dòng #${i + 1}: Số lượng nhập phải lớn hơn 0`);
+      }
+    }
+
     setSubmittingImport(true);
     try {
       const res = await inventoryApi.importStock({
-        variant_id: parseInt(importVariantId, 10),
-        quantity: qty,
-        unit_cost: importUnitCost ? parseFloat(importUnitCost) : undefined,
         supplier_id: importSupplierId ? parseInt(importSupplierId, 10) : undefined,
         note: importNote.trim(),
+        items: importItems.map((it) => ({
+          variant_id: parseInt(it.variant_id, 10),
+          quantity: parseInt(it.quantity, 10),
+          unit_cost: it.unit_cost ? parseFloat(it.unit_cost) : undefined,
+        })),
       });
       if (res.success) {
-        toast.success(res.message || `Đã nhập thêm ${qty} sản phẩm vào kho!`);
+        toast.success(res.message || 'Đã nhập kho thành công!');
         setShowImportModal(false);
         fetchInventory();
+        fetchAllVariants();
         if (activeSubTab === 'history') fetchTransactions();
       }
     } catch (err) {
@@ -182,23 +259,88 @@ export default function InventoryTab() {
     }
   };
 
+  // === XỬ LÝ XUẤT KHO NHIỀU MẶT HÀNG ===
+  const handleOpenExport = (variant = null) => {
+    if (variant) {
+      setExportItems([{
+        variant_id: String(variant.variant_id),
+        quantity: '1',
+      }]);
+    } else {
+      const available = availableVariants.find((v) => v.stock > 0);
+      setExportItems([{
+        variant_id: available ? String(available.variant_id) : '',
+        quantity: '1',
+      }]);
+    }
+    setExportType('adjustment');
+    setExportReason('Kiểm kê / điều chuyển kho');
+    setExportNote('');
+    setShowExportModal(true);
+  };
+
+  const handleAddExportRow = () => {
+    setExportItems((prev) => [
+      ...prev,
+      { variant_id: '', quantity: '1' },
+    ]);
+  };
+
+  const handleRemoveExportRow = (idx) => {
+    setExportItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateExportRow = (idx, field, value) => {
+    setExportItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const exportSummary = useMemo(() => {
+    let totalQty = 0;
+    exportItems.forEach((it) => {
+      const q = parseInt(it.quantity, 10) || 0;
+      totalQty += q;
+    });
+    return { totalQty };
+  }, [exportItems]);
+
   const handleExportSubmit = async (e) => {
     e.preventDefault();
-    const qty = parseInt(exportQty, 10);
-    if (!exportVariantId || isNaN(qty) || qty <= 0) return toast.warning('Vui lòng chọn biến thể và nhập số lượng xuất hợp lệ (> 0)');
+    if (!exportItems || exportItems.length === 0) {
+      return toast.warning('Vui lòng thêm ít nhất một mặt hàng cần xuất');
+    }
+    for (let i = 0; i < exportItems.length; i++) {
+      const it = exportItems[i];
+      const q = parseInt(it.quantity, 10);
+      if (!it.variant_id) {
+        return toast.warning(`Dòng #${i + 1}: Vui lòng chọn mặt hàng cần xuất`);
+      }
+      if (isNaN(q) || q <= 0) {
+        return toast.warning(`Dòng #${i + 1}: Số lượng xuất phải lớn hơn 0`);
+      }
+      const found = availableVariants.find((v) => String(v.variant_id) === String(it.variant_id));
+      if (found && found.stock < q) {
+        return toast.warning(`Dòng #${i + 1} (${found.sku}): Tồn kho chỉ còn ${found.stock}, không đủ để xuất ${q} chiếc!`);
+      }
+    }
+
     setSubmittingExport(true);
     try {
       const res = await inventoryApi.exportStock({
-        variant_id: parseInt(exportVariantId, 10),
-        quantity: qty,
         transaction_type: exportType,
-        reason: exportReason,
+        reason: exportReason.trim(),
         note: exportNote.trim(),
+        items: exportItems.map((it) => ({
+          variant_id: parseInt(it.variant_id, 10),
+          quantity: parseInt(it.quantity, 10),
+        })),
       });
       if (res.success) {
-        toast.success(res.message || `Đã xuất ${qty} sản phẩm ra khỏi kho!`);
+        toast.success(res.message || 'Đã xuất kho thành công!');
         setShowExportModal(false);
         fetchInventory();
+        fetchAllVariants();
         if (activeSubTab === 'history') fetchTransactions();
       }
     } catch (err) {
@@ -237,9 +379,6 @@ export default function InventoryTab() {
     return <Chip label={info.label} size="small" sx={{ bgcolor: info.bg, color: info.color, fontWeight: 800, fontSize: 11, borderRadius: 1 }} />;
   };
 
-  const currentSelectedForImport = items.find((it) => String(it.variant_id) === String(importVariantId));
-  const currentSelectedForExport = items.find((it) => String(it.variant_id) === String(exportVariantId));
-
   const kpis = [
     { title: 'Tổng số lượng tồn kho', main: summary.total_stock.toLocaleString(), unit: 'chiếc', sub: `${summary.total_variants} cấu hình / biến thể`, color: '#111827', subColor: '#10B981' },
     { title: 'Cảnh báo sắp hết kho', main: summary.low_stock_count, unit: 'mặt hàng (≤ 5)', sub: `${summary.out_of_stock_count} mặt hàng đã hết hẳn (0 chiếc)`, color: summary.low_stock_count > 0 ? '#D97706' : '#10B981', border: summary.low_stock_count > 0 ? '#FCD34D' : '#E5E7EB' },
@@ -258,14 +397,15 @@ export default function InventoryTab() {
         </Box>
         <Stack direction="row" spacing={1.25}>
           <Button variant="contained" color="success" startIcon={<AddIcon />} onClick={() => handleOpenImport()}>
-            + Nhập hàng
+            + Nhập hàng (Nhiều SP)
           </Button>
           <Button variant="contained" color="primary" startIcon={<RemoveIcon />} onClick={() => handleOpenExport()}>
-            - Xuất thêm
+            - Xuất kho (Nhiều SP)
           </Button>
           <IconButton
-            onClick={() => { fetchInventory(); if (activeSubTab === 'history') fetchTransactions(); }}
+            onClick={() => { fetchInventory(); fetchAllVariants(); if (activeSubTab === 'history') fetchTransactions(); }}
             sx={{ bgcolor: '#FFF', border: '1px solid #D1D5DB', borderRadius: 2 }}
+            title="Làm mới dữ liệu kho"
           >
             <RestartAltIcon fontSize="small" />
           </IconButton>
@@ -328,14 +468,14 @@ export default function InventoryTab() {
             ) : (
               <Table size="small">
                 <TableHead>
-                  <TableRow>
-                    <TableCell>Sản phẩm / Biến thể</TableCell>
-                    <TableCell>Mã SKU</TableCell>
-                    <TableCell>Danh mục / Hãng</TableCell>
-                    <TableCell>Giá niêm yết</TableCell>
-                    <TableCell>Tồn kho hiện tại</TableCell>
-                    <TableCell>Bảo hành</TableCell>
-                    <TableCell align="right">Thao tác kho</TableCell>
+                  <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Sản phẩm / Biến thể</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Mã SKU</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Danh mục / Hãng</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Giá niêm yết</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tồn kho hiện tại</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Bảo hành</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, fontSize: 12.5 }}>Thao tác kho</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -394,7 +534,7 @@ export default function InventoryTab() {
             )}
 
             {itemsTotalPages > 1 && (
-              <Stack direction="row" justifyContent="center" alignItems="center" spacing={1.5} sx={{ p: 2 }}>
+              <Stack direction="row" justifyContent="center" alignItems="center" spacing={1.5} sx={{ p: 2, bgcolor: '#FAFAFA', borderTop: '1px solid #E5E7EB' }}>
                 <Button size="small" variant="outlined" disabled={itemsPage === 1} onClick={() => setItemsPage((p) => Math.max(1, p - 1))}>Trang trước</Button>
                 <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Trang {itemsPage} / {itemsTotalPages}</Typography>
                 <Button size="small" variant="outlined" disabled={itemsPage === itemsTotalPages} onClick={() => setItemsPage((p) => Math.min(itemsTotalPages, p + 1))}>Trang sau</Button>
@@ -430,14 +570,14 @@ export default function InventoryTab() {
             ) : (
               <Table size="small">
                 <TableHead>
-                  <TableRow>
-                    <TableCell>Mã GD & Thời gian</TableCell>
-                    <TableCell>Sản phẩm / Biến thể</TableCell>
-                    <TableCell>Loại giao dịch</TableCell>
-                    <TableCell>Biến động số lượng</TableCell>
-                    <TableCell>Tồn kho sau GD</TableCell>
-                    <TableCell>Người thực hiện</TableCell>
-                    <TableCell>Ghi chú / Lý do</TableCell>
+                  <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Mã GD & Thời gian</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Sản phẩm / Biến thể</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Loại giao dịch</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Biến động số lượng</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tồn kho sau GD</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Người thực hiện</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Ghi chú / Lý do</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -468,7 +608,7 @@ export default function InventoryTab() {
             )}
 
             {txTotalPages > 1 && (
-              <Stack direction="row" justifyContent="center" alignItems="center" spacing={1.5} sx={{ p: 2 }}>
+              <Stack direction="row" justifyContent="center" alignItems="center" spacing={1.5} sx={{ p: 2, bgcolor: '#FAFAFA', borderTop: '1px solid #E5E7EB' }}>
                 <Button size="small" variant="outlined" disabled={txPage === 1} onClick={() => setTxPage((p) => Math.max(1, p - 1))}>Trang trước</Button>
                 <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Trang {txPage} / {txTotalPages}</Typography>
                 <Button size="small" variant="outlined" disabled={txPage === txTotalPages} onClick={() => setTxPage((p) => Math.min(txTotalPages, p + 1))}>Trang sau</Button>
@@ -478,171 +618,366 @@ export default function InventoryTab() {
         </Box>
       )}
 
-      {/* Modal: Import Stock */}
-      <Dialog open={showImportModal} onClose={() => setShowImportModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2 }}>
+      {/* ========================================================= */}
+      {/* MODAL: NHẬP HÀNG VÀO KHO (HỖ TRỢ NHIỀU SẢN PHẨM)         */}
+      {/* ========================================================= */}
+      <Dialog open={showImportModal} onClose={() => setShowImportModal(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2, bgcolor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
           <Stack direction="row" alignItems="center" spacing={1.25}>
             <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#DCFCE7', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <AddIcon />
             </Box>
             <Box>
-              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Nhập hàng vào kho (Import Stock)</Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Tăng số lượng tồn kho và ghi nhật ký giao dịch</Typography>
+              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Phiếu nhập hàng vào kho (Import Stock)</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Hỗ trợ nhập cùng lúc nhiều mặt hàng vào kho</Typography>
             </Box>
           </Stack>
           <IconButton size="small" onClick={() => setShowImportModal(false)}><CloseIcon /></IconButton>
         </DialogTitle>
 
         <Box component="form" onSubmit={handleImportSubmit}>
-          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Danh sách các mặt hàng nhập */}
             <Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể cần nhập *</Typography>
-              <Select
-                fullWidth size="small" required displayEmpty value={importVariantId}
-                onChange={(e) => {
-                  setImportVariantId(e.target.value);
-                  const sel = items.find((it) => String(it.variant_id) === e.target.value);
-                  if (sel) setImportUnitCost(String(Math.round(sel.price * 0.75)));
-                }}
-              >
-                <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
-                {items.map((it) => (
-                  <MenuItem key={it.variant_id} value={String(it.variant_id)}>
-                    {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn hiện tại: {it.stock})
-                  </MenuItem>
-                ))}
-              </Select>
-            </Box>
-
-            {currentSelectedForImport && (
-              <Paper elevation={0} sx={{ bgcolor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 2, p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box>
-                  <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#065F46' }}>Tồn kho hiện tại: {currentSelectedForImport.stock} chiếc</Typography>
-                  <Typography sx={{ fontSize: 12, color: '#047857' }}>Mã SKU: <strong>{currentSelectedForImport.sku}</strong></Typography>
-                </Box>
-                <Box sx={{ textAlign: 'right' }}>
-                  <Typography sx={{ fontSize: 11, color: '#047857', fontWeight: 600 }}>Tồn sau khi nhập:</Typography>
-                  <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#065F46' }}>
-                    {currentSelectedForImport.stock + (parseInt(importQty, 10) || 0)} chiếc
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-              <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Số lượng nhập thêm *</Typography>
-                <TextField fullWidth size="small" type="number" required inputProps={{ min: 1 }} value={importQty} onChange={(e) => setImportQty(e.target.value)} />
-              </Box>
-              <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Đơn giá nhập vốn (₫)</Typography>
-                <TextField fullWidth size="small" type="number" inputProps={{ min: 0, step: 1000 }} value={importUnitCost} onChange={(e) => setImportUnitCost(e.target.value)} />
-              </Box>
-            </Box>
-
-            <Box>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Nhà phân phối / Cung cấp</Typography>
-                <Button size="small" onClick={() => setShowAddSupplier(!showAddSupplier)} sx={{ py: 0, fontSize: 12, fontWeight: 700 }}>
-                  {showAddSupplier ? 'Hủy thêm NCC' : '+ Thêm NCC mới'}
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#1E293B' }}>
+                  Danh sách mặt hàng cần nhập ({importItems.length})
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddImportRow}
+                  sx={{ fontSize: 12, fontWeight: 700 }}
+                >
+                  + Thêm mặt hàng khác
                 </Button>
               </Stack>
 
-              {showAddSupplier ? (
-                <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 2, p: 1.5 }}>
-                  <TextField fullWidth size="small" placeholder="Tên nhà cung cấp (VD: Asus ROG VN)..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} sx={{ mb: 1, bgcolor: '#FFF' }} />
-                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1 }}>
-                    <TextField fullWidth size="small" placeholder="Số điện thoại" value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} sx={{ bgcolor: '#FFF' }} />
-                    <TextField fullWidth size="small" type="email" placeholder="Email" value={newSupplierEmail} onChange={(e) => setNewSupplierEmail(e.target.value)} sx={{ bgcolor: '#FFF' }} />
-                  </Box>
-                  <Button size="small" variant="contained" color="secondary" disabled={submittingSupplier} onClick={handleCreateSupplier}>
-                    {submittingSupplier ? 'Đang lưu...' : 'Lưu nhà cung cấp'}
-                  </Button>
-                </Paper>
-              ) : (
-                <Select fullWidth size="small" displayEmpty value={importSupplierId} onChange={(e) => setImportSupplierId(e.target.value)}>
-                  <MenuItem value="">-- Chọn nhà cung cấp (Tùy chọn) --</MenuItem>
-                  {suppliers.map((s) => (
-                    <MenuItem key={s.supplier_id} value={String(s.supplier_id)}>
-                      {s.supplier_name} {s.phone ? `(${s.phone})` : ''}
-                    </MenuItem>
-                  ))}
-                </Select>
-              )}
+              <Stack spacing={1.5}>
+                {importItems.map((item, idx) => {
+                  const selectedVar = availableVariants.find((v) => String(v.variant_id) === String(item.variant_id));
+                  const curStock = selectedVar ? selectedVar.stock : 0;
+                  const addQty = parseInt(item.quantity, 10) || 0;
+                  const afterStock = curStock + addQty;
+
+                  return (
+                    <Paper
+                      key={idx}
+                      elevation={0}
+                      sx={{
+                        p: 1.75,
+                        borderRadius: 2,
+                        border: '1px solid #E2E8F0',
+                        bgcolor: '#FAFAFA',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.25,
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: 'primary.main' }}>
+                          Mặt hàng #{idx + 1}
+                        </Typography>
+                        {importItems.length > 1 && (
+                          <Tooltip title="Xóa mặt hàng này">
+                            <IconButton size="small" color="error" onClick={() => handleRemoveImportRow(idx)}>
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Stack>
+
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr' }, gap: 1.5 }}>
+                        <Box>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể *</Typography>
+                          <Select
+                            fullWidth
+                            size="small"
+                            required
+                            displayEmpty
+                            value={item.variant_id}
+                            onChange={(e) => handleUpdateImportRow(idx, 'variant_id', e.target.value)}
+                            sx={{ bgcolor: '#FFF', fontSize: 13 }}
+                          >
+                            <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
+                            {availableVariants.map((it) => (
+                              <MenuItem key={it.variant_id} value={String(it.variant_id)}>
+                                {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn: {it.stock})
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </Box>
+
+                        <Box>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Số lượng nhập *</Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            required
+                            inputProps={{ min: 1 }}
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateImportRow(idx, 'quantity', e.target.value)}
+                            sx={{ bgcolor: '#FFF' }}
+                          />
+                        </Box>
+
+                        <Box>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Đơn giá vốn (₫)</Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            inputProps={{ min: 0, step: 1000 }}
+                            value={item.unit_cost}
+                            onChange={(e) => handleUpdateImportRow(idx, 'unit_cost', e.target.value)}
+                            sx={{ bgcolor: '#FFF' }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {selectedVar && (
+                        <Stack direction="row" spacing={2} sx={{ fontSize: 11.5, color: '#047857', bgcolor: '#ECFDF5', p: 0.75, borderRadius: 1 }}>
+                          <Box>SKU: <strong>{selectedVar.sku}</strong></Box>
+                          <Box>Tồn hiện tại: <strong>{curStock}</strong> chiếc</Box>
+                          <Box>Tồn sau nhập: <strong>{afterStock}</strong> chiếc</Box>
+                          {item.unit_cost && (
+                            <Box sx={{ ml: 'auto !important' }}>
+                              Thành tiền: <strong>{formatPrice((parseInt(item.quantity, 10) || 0) * (parseFloat(item.unit_cost) || 0))}</strong>
+                            </Box>
+                          )}
+                        </Stack>
+                      )}
+                    </Paper>
+                  );
+                })}
+              </Stack>
             </Box>
 
-            <Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Ghi chú nhập hàng</Typography>
-              <TextField fullWidth size="small" multiline rows={2} placeholder="VD: Nhập hàng đợt 1 từ NPP Viễn Sơn..." value={importNote} onChange={(e) => setImportNote(e.target.value)} />
+            {/* Khối thống kê tổng phiếu nhập */}
+            <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+              <Box>
+                <Typography sx={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>Tổng cộng phiếu nhập:</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#15803D' }}>
+                  {importItems.length} mặt hàng • {importSummary.totalQty} sản phẩm
+                </Typography>
+              </Box>
+              {importSummary.totalCost > 0 && (
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>Tổng giá trị vốn dự kiến:</Typography>
+                  <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#15803D' }}>
+                    {formatPrice(importSummary.totalCost)}
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
+
+            <Divider />
+
+            {/* Thông tin nhà cung cấp & Ghi chú */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Nhà phân phối / Cung cấp</Typography>
+                  <Button size="small" onClick={() => setShowAddSupplier(!showAddSupplier)} sx={{ py: 0, fontSize: 11.5, fontWeight: 700 }}>
+                    {showAddSupplier ? 'Hủy' : '+ Thêm NCC mới'}
+                  </Button>
+                </Stack>
+
+                {showAddSupplier ? (
+                  <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 2, p: 1.25 }}>
+                    <TextField fullWidth size="small" placeholder="Tên nhà cung cấp..." value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} sx={{ mb: 1, bgcolor: '#FFF' }} />
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1 }}>
+                      <TextField fullWidth size="small" placeholder="Số điện thoại" value={newSupplierPhone} onChange={(e) => setNewSupplierPhone(e.target.value)} sx={{ bgcolor: '#FFF' }} />
+                      <TextField fullWidth size="small" type="email" placeholder="Email" value={newSupplierEmail} onChange={(e) => setNewSupplierEmail(e.target.value)} sx={{ bgcolor: '#FFF' }} />
+                    </Box>
+                    <Button size="small" variant="contained" color="secondary" disabled={submittingSupplier} onClick={handleCreateSupplier}>
+                      {submittingSupplier ? 'Đang lưu...' : 'Lưu nhà cung cấp'}
+                    </Button>
+                  </Paper>
+                ) : (
+                  <Select fullWidth size="small" displayEmpty value={importSupplierId} onChange={(e) => setImportSupplierId(e.target.value)}>
+                    <MenuItem value="">-- Chọn nhà cung cấp (Tùy chọn) --</MenuItem>
+                    {suppliers.map((s) => (
+                      <MenuItem key={s.supplier_id} value={String(s.supplier_id)}>
+                        {s.supplier_name} {s.phone ? `(${s.phone})` : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                )}
+              </Box>
+
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Ghi chú đợt nhập hàng</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  multiline
+                  rows={2}
+                  placeholder="VD: Nhập đợt hàng tháng 10 từ NPP Viễn Sơn..."
+                  value={importNote}
+                  onChange={(e) => setImportNote(e.target.value)}
+                />
+              </Box>
             </Box>
           </DialogContent>
 
-          <DialogActions sx={{ p: 2 }}>
+          <DialogActions sx={{ p: 2, bgcolor: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
             <Button variant="outlined" color="inherit" onClick={() => setShowImportModal(false)}>Hủy</Button>
-            <Button type="submit" variant="contained" color="success" disabled={submittingImport}>
-              {submittingImport ? 'Đang cập nhật kho...' : 'Xác nhận nhập kho'}
+            <Button type="submit" variant="contained" color="success" disabled={submittingImport} sx={{ fontWeight: 800 }}>
+              {submittingImport
+                ? 'Đang cập nhật kho...'
+                : `Xác nhận nhập kho (${importItems.length} mặt hàng, ${importSummary.totalQty} sản phẩm)`}
             </Button>
           </DialogActions>
         </Box>
       </Dialog>
 
-      {/* Modal: Export Stock */}
-      <Dialog open={showExportModal} onClose={() => setShowExportModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2 }}>
+      {/* ========================================================= */}
+      {/* MODAL: XUẤT HÀNG KHỎI KHO (HỖ TRỢ NHIỀU SẢN PHẨM)        */}
+      {/* ========================================================= */}
+      <Dialog open={showExportModal} onClose={() => setShowExportModal(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2, bgcolor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
           <Stack direction="row" alignItems="center" spacing={1.25}>
-            <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: 'primary.light', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <RemoveIcon />
             </Box>
             <Box>
-              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Xuất hàng khỏi kho (Export Stock)</Typography>
-              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Giảm trừ số lượng tồn kho (kiểm kê, hư hỏng, điều chuyển...)</Typography>
+              <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Phiếu xuất hàng khỏi kho (Export Stock)</Typography>
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Hỗ trợ xuất cùng lúc nhiều mặt hàng (kiểm kê, hư hỏng, điều chuyển...)</Typography>
             </Box>
           </Stack>
           <IconButton size="small" onClick={() => setShowExportModal(false)}><CloseIcon /></IconButton>
         </DialogTitle>
 
         <Box component="form" onSubmit={handleExportSubmit}>
-          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Danh sách các mặt hàng xuất */}
             <Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể cần xuất *</Typography>
-              <Select fullWidth size="small" required displayEmpty value={exportVariantId} onChange={(e) => setExportVariantId(e.target.value)}>
-                <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
-                {items.map((it) => (
-                  <MenuItem key={it.variant_id} value={String(it.variant_id)}>
-                    {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn: {it.stock})
-                  </MenuItem>
-                ))}
-              </Select>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: '#1E293B' }}>
+                  Danh sách mặt hàng cần xuất ({exportItems.length})
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddExportRow}
+                  sx={{ fontSize: 12, fontWeight: 700 }}
+                >
+                  + Thêm mặt hàng khác
+                </Button>
+              </Stack>
+
+              <Stack spacing={1.5}>
+                {exportItems.map((item, idx) => {
+                  const selectedVar = availableVariants.find((v) => String(v.variant_id) === String(item.variant_id));
+                  const curStock = selectedVar ? selectedVar.stock : 0;
+                  const expQty = parseInt(item.quantity, 10) || 0;
+                  const afterStock = Math.max(0, curStock - expQty);
+                  const isOver = curStock < expQty;
+
+                  return (
+                    <Paper
+                      key={idx}
+                      elevation={0}
+                      sx={{
+                        p: 1.75,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: isOver ? '#FCA5A5' : '#E2E8F0',
+                        bgcolor: isOver ? '#FEF2F2' : '#FAFAFA',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.25,
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: isOver ? 'error.main' : '#334155' }}>
+                          Mặt hàng #{idx + 1}
+                        </Typography>
+                        {exportItems.length > 1 && (
+                          <Tooltip title="Xóa mặt hàng này">
+                            <IconButton size="small" color="error" onClick={() => handleRemoveExportRow(idx)}>
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Stack>
+
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr' }, gap: 1.5 }}>
+                        <Box>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể cần xuất *</Typography>
+                          <Select
+                            fullWidth
+                            size="small"
+                            required
+                            displayEmpty
+                            value={item.variant_id}
+                            onChange={(e) => handleUpdateExportRow(idx, 'variant_id', e.target.value)}
+                            sx={{ bgcolor: '#FFF', fontSize: 13 }}
+                          >
+                            <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
+                            {availableVariants.map((it) => (
+                              <MenuItem key={it.variant_id} value={String(it.variant_id)} disabled={it.stock === 0}>
+                                {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn: {it.stock}) {it.stock === 0 ? '(Hết hàng)' : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </Box>
+
+                        <Box>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Số lượng xuất *</Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            required
+                            inputProps={{ min: 1, max: selectedVar ? selectedVar.stock : undefined }}
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateExportRow(idx, 'quantity', e.target.value)}
+                            error={isOver}
+                            helperText={isOver ? `Vượt quá tồn kho (chỉ còn ${curStock})` : ''}
+                            sx={{ bgcolor: '#FFF' }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {selectedVar && (
+                        <Stack direction="row" spacing={2} sx={{ fontSize: 11.5, color: isOver ? '#B91C1C' : '#991B1B', bgcolor: isOver ? '#FEE2E2' : '#FFF1F2', p: 0.75, borderRadius: 1 }}>
+                          <Box>SKU: <strong>{selectedVar.sku}</strong></Box>
+                          <Box>Tồn hiện tại: <strong>{curStock}</strong> chiếc</Box>
+                          <Box>Tồn sau xuất: <strong>{afterStock}</strong> chiếc</Box>
+                        </Stack>
+                      )}
+                    </Paper>
+                  );
+                })}
+              </Stack>
             </Box>
 
-            {currentSelectedForExport && (
-              <Paper elevation={0} sx={{ bgcolor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 2, p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box>
-                  <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#991B1B' }}>Tồn kho hiện tại: {currentSelectedForExport.stock} chiếc</Typography>
-                  <Typography sx={{ fontSize: 12, color: '#B91C1C' }}>Mã SKU: <strong>{currentSelectedForExport.sku}</strong></Typography>
-                </Box>
-                <Box sx={{ textAlign: 'right' }}>
-                  <Typography sx={{ fontSize: 11, color: '#B91C1C', fontWeight: 600 }}>Tồn sau khi xuất:</Typography>
-                  <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#991B1B' }}>
-                    {Math.max(0, currentSelectedForExport.stock - (parseInt(exportQty, 10) || 0))} chiếc
-                  </Typography>
-                </Box>
-              </Paper>
-            )}
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            {/* Khối thống kê tổng phiếu xuất */}
+            <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FFF1F2', border: '1px solid #FECDD3', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Số lượng xuất kho *</Typography>
-                <TextField
-                  fullWidth size="small" type="number" required
-                  inputProps={{ min: 1, max: currentSelectedForExport ? currentSelectedForExport.stock : undefined }}
-                  value={exportQty} onChange={(e) => setExportQty(e.target.value)}
-                />
+                <Typography sx={{ fontSize: 12, color: '#9F1239', fontWeight: 600 }}>Tổng cộng phiếu xuất:</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#BE123C' }}>
+                  {exportItems.length} mặt hàng • {exportSummary.totalQty} sản phẩm
+                </Typography>
               </Box>
+            </Paper>
+
+            <Divider />
+
+            {/* Thông tin loại xuất & Lý do */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
               <Box>
                 <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Loại xuất kho *</Typography>
                 <Select
-                  fullWidth size="small" required value={exportType}
+                  fullWidth
+                  size="small"
+                  required
+                  value={exportType}
                   onChange={(e) => {
                     setExportType(e.target.value);
                     setExportReason(e.target.value === 'damage' ? 'Xuất hủy hàng lỗi / hỏng / vỡ màn hình' : 'Kiểm kê / điều chuyển kho');
@@ -653,27 +988,45 @@ export default function InventoryTab() {
                   <MenuItem value="sale">🛒 Xuất bán lẻ trực tiếp</MenuItem>
                 </Select>
               </Box>
-            </Box>
 
-            <Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Lý do xuất kho *</Typography>
-              <TextField fullWidth size="small" required value={exportReason} onChange={(e) => setExportReason(e.target.value)} />
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Lý do xuất kho *</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  required
+                  value={exportReason}
+                  onChange={(e) => setExportReason(e.target.value)}
+                />
+              </Box>
             </Box>
 
             <Box>
               <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Ghi chú chi tiết</Typography>
-              <TextField fullWidth size="small" multiline rows={2} placeholder="Thông tin thêm, người nhận hàng, biên bản bàn giao..." value={exportNote} onChange={(e) => setExportNote(e.target.value)} />
+              <TextField
+                fullWidth
+                size="small"
+                multiline
+                rows={2}
+                placeholder="Thông tin thêm, người nhận hàng, biên bản bàn giao..."
+                value={exportNote}
+                onChange={(e) => setExportNote(e.target.value)}
+              />
             </Box>
           </DialogContent>
 
-          <DialogActions sx={{ p: 2 }}>
+          <DialogActions sx={{ p: 2, bgcolor: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
             <Button variant="outlined" color="inherit" onClick={() => setShowExportModal(false)}>Hủy</Button>
             <Button
               type="submit"
               variant="contained"
-              disabled={submittingExport || (currentSelectedForExport && currentSelectedForExport.stock < parseInt(exportQty, 10))}
+              color="primary"
+              disabled={submittingExport}
+              sx={{ fontWeight: 800 }}
             >
-              {submittingExport ? 'Đang xử lý xuất kho...' : 'Xác nhận xuất kho'}
+              {submittingExport
+                ? 'Đang xử lý xuất kho...'
+                : `Xác nhận xuất kho (${exportItems.length} mặt hàng, ${exportSummary.totalQty} sản phẩm)`}
             </Button>
           </DialogActions>
         </Box>

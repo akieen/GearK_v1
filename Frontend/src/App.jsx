@@ -61,8 +61,9 @@ const parseRoute = (path) => {
     return { route: 'order-success', params: { orderCode: code, ...params } };
   } else if (cleanPath.startsWith('vnpay_return') || cleanPath.startsWith('vnpay-return')) {
     return { route: 'vnpay-return', params };
-  } else if (cleanPath.startsWith('admin')) {
-    return { route: 'admin', params };
+  } else if (cleanPath === 'admin' || cleanPath.startsWith('admin/')) {
+    const adminTab = cleanPath.replace(/^admin\/?/, '').trim();
+    return { route: 'admin', params: { adminTab, ...params } };
   }
 
   return { route: cleanPath || 'home', params };
@@ -112,7 +113,9 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Fetch initial data
+  const isAdminRoute = currentRoute === 'admin' || currentRoute.startsWith('admin');
+
+  // Fetch initial data for Storefront only (không gọi lãng phí khi đang ở trang Admin)
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -134,8 +137,11 @@ function AppContent() {
         console.error('Lỗi nạp dữ liệu ban đầu:', err);
       }
     };
-    loadInitialData();
-  }, []);
+
+    if (!isAdminRoute) {
+      loadInitialData();
+    }
+  }, [isAdminRoute]);
 
   // Custom client navigation
   const navigate = (path, updateHash = true) => {
@@ -146,11 +152,10 @@ function AppContent() {
     setRouteParams(params);
 
     if (updateHash) {
-      window.location.hash = path;
+      const formattedPath = path.startsWith('/') ? path : `/${path}`;
+      window.location.hash = formattedPath;
     }
   };
-
-  const isAdminRoute = currentRoute === 'admin' || currentRoute.startsWith('admin');
 
   return (
     <>
@@ -230,7 +235,10 @@ function AppContent() {
         )}
 
         {currentRoute === 'admin' && (
-          <AdminDashboardPage onNavigate={navigate} />
+          <AdminDashboardPage
+            onNavigate={navigate}
+            currentTab={routeParams.adminTab}
+          />
         )}
       </Box>
 

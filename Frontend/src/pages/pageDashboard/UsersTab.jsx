@@ -30,6 +30,7 @@ import SearchIcon from '@mui/icons-material/Search';
 
 import { authApi } from '../../api/authApi';
 import { formatDate } from '../../utils/formatters';
+import AdminPagination from '../../components/common/AdminPagination';
 
 const ROLE_OPTIONS = [
   { value: 'staff', title: '👔 Nhân viên (Staff)', desc: 'Quản lý đơn hàng, thêm sửa sản phẩm, kiểm kho; không có quyền xóa và quản lý nhân sự.', color: '#4F46E5', bg: '#EEF2FF' },
@@ -44,7 +45,7 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
   const [loading, setLoading] = useState(false);
   const [roleFilter, setRoleFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(10);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total_pages: 1, total_items: 0 });
 
@@ -62,7 +63,7 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
     setLoading(true);
     try {
       const res = await authApi.getUsers({
-        page,
+        page: page + 1,
         limit,
         role: roleFilter !== 'all' ? roleFilter : undefined,
         search: searchTerm.trim() || undefined,
@@ -206,7 +207,7 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
                 key={tab.id}
                 size="small"
                 variant={active ? 'contained' : 'outlined'}
-                onClick={() => { setRoleFilter(tab.id); setPage(1); }}
+                onClick={() => { setRoleFilter(tab.id); setPage(0); }}
                 sx={{ borderRadius: 5, px: 2, py: 0.5, fontSize: 13, borderColor: active ? 'primary.main' : '#E2E8F0', color: active ? '#FFF' : 'text.secondary' }}
               >
                 {tab.label}
@@ -219,7 +220,7 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
           size="small"
           placeholder="Tìm theo tên hoặc email..."
           value={searchTerm}
-          onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+          onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
           InputProps={{ endAdornment: <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} /> }}
           sx={{ width: 260, '& .MuiOutlinedInput-root': { borderRadius: 5, bgcolor: '#F8FAFC' }, '& input': { fontSize: 13, py: 0.85 } }}
         />
@@ -331,40 +332,17 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
           </Table>
         </TableContainer>
 
-        <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5} sx={{ px: 2.5, py: 1.75, bgcolor: '#FAFAFA', borderTop: '1px solid #EEF2F6' }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-              Hiển thị <strong>{pagination.total_items === 0 ? 0 : (page - 1) * limit + 1}</strong> - <strong>{Math.min(page * limit, pagination.total_items)}</strong> trên tổng số <strong>{pagination.total_items}</strong> người dùng
-            </Typography>
-            <Select size="small" value={limit} onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setPage(1); }} sx={{ fontSize: 12.5, height: 30, bgcolor: '#FFF' }}>
-              {[5, 10, 20, 50].map((n) => <MenuItem key={n} value={n}>{n} dòng</MenuItem>)}
-            </Select>
-          </Stack>
-
-          <Stack direction="row" spacing={0.75}>
-            <Button size="small" variant="outlined" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} sx={{ minWidth: 64, py: 0.5, fontSize: 12.5 }}>
-              Trước
-            </Button>
-            {Array.from({ length: pagination.total_pages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === pagination.total_pages || Math.abs(p - page) <= 1)
-              .map((p, idx, arr) => (
-                <React.Fragment key={p}>
-                  {arr[idx - 1] && p - arr[idx - 1] > 1 && <Typography sx={{ px: 0.5, alignSelf: 'center', color: 'text.disabled' }}>...</Typography>}
-                  <Button
-                    size="small"
-                    variant={page === p ? 'contained' : 'outlined'}
-                    onClick={() => setPage(p)}
-                    sx={{ minWidth: 32, height: 32, p: 0, fontSize: 12.5 }}
-                  >
-                    {p}
-                  </Button>
-                </React.Fragment>
-              ))}
-            <Button size="small" variant="outlined" disabled={page >= pagination.total_pages} onClick={() => setPage((p) => Math.min(pagination.total_pages, p + 1))} sx={{ minWidth: 64, py: 0.5, fontSize: 12.5 }}>
-              Sau
-            </Button>
-          </Stack>
-        </Stack>
+        <AdminPagination
+          count={pagination.total_items || 0}
+          page={page}
+          rowsPerPage={limit}
+          onPageChange={(e, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setLimit(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[5, 10, 20, 50]}
+        />
       </Paper>
 
       <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid #EEF2F6' }}>

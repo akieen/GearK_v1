@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -19,12 +19,22 @@ import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 
 import { brandApi } from '../../api/categoryApi';
 import { useToast } from '../../context/ToastContext';
+import AdminPagination from '../../components/common/AdminPagination';
 
-export default function BrandsTab({ brands, fetchBrands, isAdmin }) {
+export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
   const toast = useToast();
   const [newBrandName, setNewBrandName] = useState('');
   const [newLogoUrl, setNewLogoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const paginatedBrands = useMemo(() => {
+    const start = page * rowsPerPage;
+    return brands.slice(start, start + rowsPerPage);
+  }, [brands, page, rowsPerPage]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -100,21 +110,21 @@ export default function BrandsTab({ brands, fetchBrands, isAdmin }) {
         </Box>
       </Paper>
 
-      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0' }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB' }}>
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, py: 2, borderBottom: '1px solid #E5E7EB', bgcolor: '#FFFFFF' }}>
           <Typography sx={{ fontWeight: 800, fontSize: 15 }}>Danh sách thương hiệu ({brands.length})</Typography>
           <Button size="small" onClick={fetchBrands} sx={{ fontSize: 12.5, fontWeight: 700 }}>Làm mới</Button>
         </Stack>
 
         <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Logo</TableCell>
-              <TableCell>Tên thương hiệu</TableCell>
-              <TableCell>Slug</TableCell>
-              <TableCell>Số sản phẩm</TableCell>
-              <TableCell>Thao tác</TableCell>
+            <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>ID</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Logo</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tên thương hiệu</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Slug</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Số sản phẩm</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Thao tác</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -123,7 +133,7 @@ export default function BrandsTab({ brands, fetchBrands, isAdmin }) {
                 <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có thương hiệu nào</TableCell>
               </TableRow>
             ) : (
-              brands.map((b) => (
+              paginatedBrands.map((b) => (
                 <TableRow key={b.brand_id} hover>
                   <TableCell sx={{ fontWeight: 700, color: 'text.secondary', py: 1.5 }}>#{b.brand_id}</TableCell>
                   <TableCell>
@@ -148,6 +158,19 @@ export default function BrandsTab({ brands, fetchBrands, isAdmin }) {
             )}
           </TableBody>
         </Table>
+
+        {brands.length > 0 && (
+          <AdminPagination
+            count={brands.length}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+          />
+        )}
       </TableContainer>
     </Box>
   );
