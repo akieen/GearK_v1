@@ -41,6 +41,8 @@ export const CartDrawer = ({ onNavigate }) => {
       anchor="right"
       open={isCartDrawerOpen}
       onClose={() => setIsCartDrawerOpen(false)}
+      restoreFocus={false}
+      disableRestoreFocus
       PaperProps={{
         sx: {
           width: { xs: '100%', sm: 420 },

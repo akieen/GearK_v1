@@ -98,14 +98,26 @@ export default function ProductsTab({
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5} sx={{ mb: 2 }}>
-        <Box>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        flexWrap="wrap"
+        gap={2}
+        sx={{ mb: 2.5 }}
+      >
+        <Box sx={{ pr: 2 }}>
           <Typography sx={{ fontWeight: 800, fontSize: 18 }}>Quản lý sản phẩm ({products.length})</Typography>
-          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.25 }}>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5 }}>
             Bao gồm cả sản phẩm đang bán, tạm ngưng và lưu trữ
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setShowAddProductModal(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setShowAddProductModal(true)}
+          sx={{ whiteSpace: 'nowrap', px: 2.5, py: 1, minHeight: 40, mt: { xs: 1.5, sm: 0 } }}
+        >
           Thêm sản phẩm mới
         </Button>
       </Stack>

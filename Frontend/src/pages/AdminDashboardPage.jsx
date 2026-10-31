@@ -102,14 +102,14 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
   const initialTab = PATH_TO_TAB[currentTab?.toLowerCase()] || 'stats';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [productsMenuOpen, setProductsMenuOpen] = useState(
-    ['products', 'variants', 'categories'].includes(initialTab)
+    ['products', 'variants', 'categories', 'brands'].includes(initialTab)
   );
 
   useEffect(() => {
     const tabFromUrl = PATH_TO_TAB[currentTab?.toLowerCase()] || 'stats';
     if (tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
-      if (['products', 'variants', 'categories'].includes(tabFromUrl)) {
+      if (['products', 'variants', 'categories', 'brands'].includes(tabFromUrl)) {
         setProductsMenuOpen(true);
       }
     }
@@ -117,7 +117,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
-    if (['products', 'variants', 'categories'].includes(tabId)) {
+    if (['products', 'variants', 'categories', 'brands'].includes(tabId)) {
       setProductsMenuOpen(true);
     }
     const path = TAB_TO_PATH[tabId] || 'admin/dashboard';
@@ -481,10 +481,10 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
           {renderNavBtn('inventory', 'Quản lý Tồn kho', <GridViewOutlinedIcon sx={{ fontSize: 18 }} />)}
 
           <ListItemButton
-            sx={navBtnSx(['products', 'variants', 'categories'].includes(activeTab))}
+            sx={navBtnSx(['products', 'variants', 'categories', 'brands'].includes(activeTab))}
             onClick={() => {
               setProductsMenuOpen(!productsMenuOpen);
-              if (!['products', 'variants', 'categories'].includes(activeTab)) handleTabChange('products');
+              if (!['products', 'variants', 'categories', 'brands'].includes(activeTab)) handleTabChange('products');
             }}
           >
             <ListItemIcon><DescriptionOutlinedIcon sx={{ fontSize: 18 }} /></ListItemIcon>
@@ -498,6 +498,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
                 { id: 'products', label: 'Danh sách sản phẩm' },
                 { id: 'variants', label: 'Phiên bản / Biến thể' },
                 { id: 'categories', label: 'Danh mục sản phẩm' },
+                { id: 'brands', label: 'Thương hiệu sản phẩm' },
               ].map((sub) => {
                 const subActive = activeTab === sub.id;
                 return (
@@ -520,8 +521,6 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
               })}
             </Stack>
           </Collapse>
-
-          {renderNavBtn('brands', 'Thương hiệu (Brands)', <StarIcon sx={{ fontSize: 18 }} />)}
           {renderNavBtn('coupons', 'Mã giảm giá (Coupons)', <CreditCardOutlinedIcon sx={{ fontSize: 18 }} />)}
 
           {renderGroupTitle('HỆ THỐNG')}
