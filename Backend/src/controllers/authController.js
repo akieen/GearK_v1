@@ -1,11 +1,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
 function generateToken(userId, role) {
   return jwt.sign(
-    { userId, role },
+    { userId: userId.toString(), role },
     process.env.JWT_SECRET || 'geark_jwt_secret_token_secure_key_2026',
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
@@ -24,9 +24,13 @@ async function register(req, res, next) {
       return errorResponse(res, 'Mật khẩu phải chứa ít nhất 6 ký tự', 400);
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     // Check if email already exists
-    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ? LIMIT 1', [email]);
-    if (existing.length > 0) {
+    const existing = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+    if (existing) {
       return errorResponse(res, 'Email này đã được sử dụng', 409);
     }
 
@@ -37,44 +41,39 @@ async function register(req, res, next) {
     // Only allow customer role on public registration (admin can create staff/admin)
     const assignedRole = role === 'admin' ? 'customer' : role;
 
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      const [userResult] = await connection.query(
-        'INSERT INTO users (full_name, email, password_hash, role) VALUES (?, ?, ?, ?)',
-        [full_name, email, password_hash, assignedRole]
-      );
-      const userId = userResult.insertId;
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          full_name: full_name.trim(),
+          email: cleanEmail,
+          password_hash,
+          role: assignedRole,
+        },
+      });
 
       // Automatically initialize cart and wishlist for user
-      await connection.query('INSERT INTO carts (user_id) VALUES (?)', [userId]);
-      await connection.query('INSERT INTO wishlists (user_id) VALUES (?)', [userId]);
+      await tx.cart.create({ data: { user_id: user.user_id } });
+      await tx.wishlist.create({ data: { user_id: user.user_id } });
 
-      await connection.commit();
+      return user;
+    });
 
-      const token = generateToken(userId, assignedRole);
+    const token = generateToken(newUser.user_id, assignedRole);
 
-      return successResponse(
-        res,
-        {
-          user: {
-            user_id: userId,
-            full_name,
-            email,
-            role: assignedRole
-          },
-          token
+    return successResponse(
+      res,
+      {
+        user: {
+          user_id: newUser.user_id,
+          full_name: newUser.full_name,
+          email: newUser.email,
+          role: assignedRole,
         },
-        'Đăng ký tài khoản thành công',
-        201
-      );
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+        token,
+      },
+      'Đăng ký tài khoản thành công',
+      201
+    );
   } catch (error) {
     next(error);
   }
@@ -89,16 +88,16 @@ async function login(req, res, next) {
       return errorResponse(res, 'Vui lòng nhập email và mật khẩu', 400);
     }
 
-    const [users] = await pool.query(
-      'SELECT user_id, full_name, email, password_hash, role FROM users WHERE email = ? LIMIT 1',
-      [email]
-    );
+    const cleanEmail = email.trim().toLowerCase();
 
-    if (users.length === 0) {
+    const user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (!user) {
       return errorResponse(res, 'Email hoặc mật khẩu không chính xác', 401);
     }
 
-    const user = users[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return errorResponse(res, 'Email hoặc mật khẩu không chính xác', 401);
@@ -106,15 +105,19 @@ async function login(req, res, next) {
 
     const token = generateToken(user.user_id, user.role);
 
-    return successResponse(res, {
-      user: {
-        user_id: user.user_id,
-        full_name: user.full_name,
-        email: user.email,
-        role: user.role
+    return successResponse(
+      res,
+      {
+        user: {
+          user_id: user.user_id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+        },
+        token,
       },
-      token
-    }, 'Đăng nhập thành công');
+      'Đăng nhập thành công'
+    );
   } catch (error) {
     next(error);
   }
@@ -123,16 +126,24 @@ async function login(req, res, next) {
 // [GET] /api/auth/profile
 async function getProfile(req, res, next) {
   try {
-    const [users] = await pool.query(
-      'SELECT user_id, full_name, email, role, created_at, updated_at FROM users WHERE user_id = ? LIMIT 1',
-      [req.user.user_id]
-    );
+    const userId = BigInt(req.user.user_id);
+    const user = await prisma.user.findUnique({
+      where: { user_id: userId },
+      select: {
+        user_id: true,
+        full_name: true,
+        email: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
 
-    if (users.length === 0) {
+    if (!user) {
       return errorResponse(res, 'Không tìm thấy thông tin tài khoản', 404);
     }
 
-    return successResponse(res, users[0], 'Lấy thông tin người dùng thành công');
+    return successResponse(res, user, 'Lấy thông tin người dùng thành công');
   } catch (error) {
     next(error);
   }
@@ -142,36 +153,49 @@ async function getProfile(req, res, next) {
 async function updateProfile(req, res, next) {
   try {
     const { full_name, old_password, new_password } = req.body;
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
 
     if (!full_name && !new_password) {
       return errorResponse(res, 'Không có dữ liệu cần cập nhật', 400);
     }
 
+    const updateData = {};
+
     if (new_password) {
       if (!old_password) {
         return errorResponse(res, 'Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu', 400);
       }
-      const [rows] = await pool.query('SELECT password_hash FROM users WHERE user_id = ?', [userId]);
-      const isMatch = await bcrypt.compare(old_password, rows[0].password_hash);
+      const user = await prisma.user.findUnique({
+        where: { user_id: userId },
+      });
+      if (!user) {
+        return errorResponse(res, 'Người dùng không tồn tại', 404);
+      }
+      const isMatch = await bcrypt.compare(old_password, user.password_hash);
       if (!isMatch) {
         return errorResponse(res, 'Mật khẩu hiện tại không đúng', 400);
       }
       const salt = await bcrypt.genSalt(10);
-      const newHash = await bcrypt.hash(new_password, salt);
-      await pool.query('UPDATE users SET password_hash = ? WHERE user_id = ?', [newHash, userId]);
+      updateData.password_hash = await bcrypt.hash(new_password, salt);
     }
 
     if (full_name) {
-      await pool.query('UPDATE users SET full_name = ? WHERE user_id = ?', [full_name, userId]);
+      updateData.full_name = full_name.trim();
     }
 
-    const [updated] = await pool.query(
-      'SELECT user_id, full_name, email, role, updated_at FROM users WHERE user_id = ?',
-      [userId]
-    );
+    const updated = await prisma.user.update({
+      where: { user_id: userId },
+      data: updateData,
+      select: {
+        user_id: true,
+        full_name: true,
+        email: true,
+        role: true,
+        updated_at: true,
+      },
+    });
 
-    return successResponse(res, updated[0], 'Cập nhật thông tin thành công');
+    return successResponse(res, updated, 'Cập nhật thông tin thành công');
   } catch (error) {
     next(error);
   }
@@ -185,48 +209,44 @@ async function getAllUsers(req, res, next) {
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 10));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereConditions = [];
-    const params = [];
+    const whereConditions = {};
 
     if (role && role !== 'all') {
-      whereConditions.push('role = ?');
-      params.push(role);
+      whereConditions.role = role;
     }
 
     if (search && search.trim() !== '') {
-      whereConditions.push('(full_name LIKE ? OR email LIKE ?)');
-      const kw = `%${search.trim()}%`;
-      params.push(kw, kw);
+      const kw = search.trim();
+      whereConditions.OR = [
+        { full_name: { contains: kw } },
+        { email: { contains: kw } },
+      ];
     }
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const [totalItems, users, total_users, total_admins, total_staff, total_customers] =
+      await Promise.all([
+        prisma.user.count({ where: whereConditions }),
+        prisma.user.findMany({
+          where: whereConditions,
+          orderBy: { user_id: 'desc' },
+          skip: offset,
+          take: limitNum,
+          select: {
+            user_id: true,
+            full_name: true,
+            email: true,
+            role: true,
+            created_at: true,
+            updated_at: true,
+          },
+        }),
+        prisma.user.count(),
+        prisma.user.count({ where: { role: 'admin' } }),
+        prisma.user.count({ where: { role: 'staff' } }),
+        prisma.user.count({ where: { role: 'customer' } }),
+      ]);
 
-    // Count filtered records
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) AS total FROM users ${whereClause}`,
-      params
-    );
-    const totalItems = countResult[0].total || 0;
     const totalPages = Math.ceil(totalItems / limitNum) || 1;
-
-    // Fetch paginated users
-    const [users] = await pool.query(
-      `SELECT user_id, full_name, email, role, created_at, updated_at 
-       FROM users 
-       ${whereClause} 
-       ORDER BY user_id DESC 
-       LIMIT ? OFFSET ?`,
-      [...params, limitNum, offset]
-    );
-
-    const [summaryRows] = await pool.query(`
-      SELECT 
-        COUNT(*) AS total_users,
-        SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS total_admins,
-        SUM(CASE WHEN role = 'staff' THEN 1 ELSE 0 END) AS total_staff,
-        SUM(CASE WHEN role = 'customer' THEN 1 ELSE 0 END) AS total_customers
-      FROM users
-    `);
 
     return successResponse(
       res,
@@ -239,11 +259,11 @@ async function getAllUsers(req, res, next) {
           total_pages: totalPages,
         },
         summary: {
-          total_users: Number(summaryRows[0].total_users) || 0,
-          total_admins: Number(summaryRows[0].total_admins) || 0,
-          total_staff: Number(summaryRows[0].total_staff) || 0,
-          total_customers: Number(summaryRows[0].total_customers) || 0,
-        }
+          total_users,
+          total_admins,
+          total_staff,
+          total_customers,
+        },
       },
       'Danh sách người dùng và nhân viên'
     );
@@ -265,9 +285,13 @@ async function createStaff(req, res, next) {
       return errorResponse(res, 'Mật khẩu phải chứa ít nhất 6 ký tự', 400);
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     // Check existing email
-    const [existing] = await pool.query('SELECT user_id FROM users WHERE email = ? LIMIT 1', [email.trim()]);
-    if (existing.length > 0) {
+    const existing = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+    if (existing) {
       return errorResponse(res, 'Email này đã tồn tại trên hệ thống', 409);
     }
 
@@ -275,39 +299,34 @@ async function createStaff(req, res, next) {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      const [userResult] = await connection.query(
-        'INSERT INTO users (full_name, email, password_hash, role) VALUES (?, ?, ?, "staff")',
-        [full_name.trim(), email.trim(), password_hash]
-      );
-      const userId = userResult.insertId;
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          full_name: full_name.trim(),
+          email: cleanEmail,
+          password_hash,
+          role: 'staff',
+        },
+      });
 
       // Initialize cart and wishlist
-      await connection.query('INSERT INTO carts (user_id) VALUES (?)', [userId]);
-      await connection.query('INSERT INTO wishlists (user_id) VALUES (?)', [userId]);
+      await tx.cart.create({ data: { user_id: user.user_id } });
+      await tx.wishlist.create({ data: { user_id: user.user_id } });
 
-      await connection.commit();
+      return user;
+    });
 
-      return successResponse(
-        res,
-        {
-          user_id: userId,
-          full_name: full_name.trim(),
-          email: email.trim(),
-          role: 'staff'
-        },
-        'Tạo tài khoản nhân viên (Staff) thành công',
-        201
-      );
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+    return successResponse(
+      res,
+      {
+        user_id: newUser.user_id,
+        full_name: newUser.full_name,
+        email: newUser.email,
+        role: 'staff',
+      },
+      'Tạo tài khoản nhân viên (Staff) thành công',
+      201
+    );
   } catch (error) {
     next(error);
   }
@@ -316,32 +335,42 @@ async function createStaff(req, res, next) {
 // [PUT] /api/auth/users/:id/role (Admin only)
 async function updateUserRole(req, res, next) {
   try {
-    const { id } = req.params;
+    const targetId = BigInt(req.params.id);
+    const currentUserId = BigInt(req.user.user_id);
     const { role } = req.body;
-    const targetId = parseInt(id, 10);
 
     if (!['customer', 'staff', 'admin'].includes(role)) {
       return errorResponse(res, 'Vai trò không hợp lệ (customer, staff, admin)', 400);
     }
 
-    const [existing] = await pool.query('SELECT role, full_name FROM users WHERE user_id = ?', [targetId]);
-    if (existing.length === 0) {
+    const existing = await prisma.user.findUnique({
+      where: { user_id: targetId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Người dùng không tồn tại', 404);
     }
 
-    if (req.user.user_id === targetId && role !== 'admin') {
+    if (currentUserId === targetId && role !== 'admin') {
       return errorResponse(res, 'Bạn không thể tự hạ quyền Admin của chính mình', 400);
     }
 
-    if (existing[0].role === 'admin' && role !== 'admin') {
-      const [adminCount] = await pool.query('SELECT COUNT(*) AS total FROM users WHERE role = "admin"');
-      if (adminCount[0].total <= 1) {
+    if (existing.role === 'admin' && role !== 'admin') {
+      const adminCount = await prisma.user.count({ where: { role: 'admin' } });
+      if (adminCount <= 1) {
         return errorResponse(res, 'Hệ thống cần ít nhất 1 Admin, không thể hạ quyền Admin duy nhất', 400);
       }
     }
 
-    await pool.query('UPDATE users SET role = ? WHERE user_id = ?', [role, targetId]);
-    return successResponse(res, { user_id: targetId, role }, `Cập nhật vai trò thành công cho "${existing[0].full_name}" sang ${role}`);
+    await prisma.user.update({
+      where: { user_id: targetId },
+      data: { role },
+    });
+
+    return successResponse(
+      res,
+      { user_id: targetId, role },
+      `Cập nhật vai trò thành công cho "${existing.full_name}" sang ${role}`
+    );
   } catch (error) {
     next(error);
   }
@@ -350,27 +379,32 @@ async function updateUserRole(req, res, next) {
 // [DELETE] /api/auth/users/:id (Admin only)
 async function deleteUser(req, res, next) {
   try {
-    const { id } = req.params;
-    const targetId = parseInt(id, 10);
+    const targetId = BigInt(req.params.id);
+    const currentUserId = BigInt(req.user.user_id);
 
-    if (req.user.user_id === targetId) {
+    if (currentUserId === targetId) {
       return errorResponse(res, 'Bạn không thể tự xóa tài khoản của chính mình', 400);
     }
 
-    const [existing] = await pool.query('SELECT role, full_name FROM users WHERE user_id = ?', [targetId]);
-    if (existing.length === 0) {
+    const existing = await prisma.user.findUnique({
+      where: { user_id: targetId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Người dùng không tồn tại', 404);
     }
 
-    if (existing[0].role === 'admin') {
-      const [adminCount] = await pool.query('SELECT COUNT(*) AS total FROM users WHERE role = "admin"');
-      if (adminCount[0].total <= 1) {
+    if (existing.role === 'admin') {
+      const adminCount = await prisma.user.count({ where: { role: 'admin' } });
+      if (adminCount <= 1) {
         return errorResponse(res, 'Không thể xóa Admin duy nhất của hệ thống', 400);
       }
     }
 
-    await pool.query('DELETE FROM users WHERE user_id = ?', [targetId]);
-    return successResponse(res, null, `Đã xóa tài khoản "${existing[0].full_name}" thành công`);
+    await prisma.user.delete({
+      where: { user_id: targetId },
+    });
+
+    return successResponse(res, null, `Đã xóa tài khoản "${existing.full_name}" thành công`);
   } catch (error) {
     next(error);
   }

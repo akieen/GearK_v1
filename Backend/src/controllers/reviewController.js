@@ -1,27 +1,35 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
 // [GET] /api/reviews/product/:productId
 async function getProductReviews(req, res, next) {
   try {
-    const { productId } = req.params;
+    const productId = BigInt(req.params.productId);
 
-    const [reviews] = await pool.query(`
-      SELECT 
-        r.review_id,
-        r.rating,
-        r.content,
-        r.created_at,
-        u.user_id,
-        u.full_name,
-        u.full_name AS user_name
-      FROM reviews r
-      JOIN users u ON r.user_id = u.user_id
-      WHERE r.product_id = ?
-      ORDER BY r.created_at DESC
-    `, [productId]);
+    const reviews = await prisma.review.findMany({
+      where: { product_id: productId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            full_name: true,
+          },
+        },
+      },
+    });
 
-    return successResponse(res, reviews, 'Danh sách đánh giá sản phẩm');
+    const formatted = reviews.map((r) => ({
+      review_id: r.review_id,
+      rating: r.rating,
+      content: r.content,
+      created_at: r.created_at,
+      user_id: r.user?.user_id,
+      full_name: r.user?.full_name,
+      user_name: r.user?.full_name,
+    }));
+
+    return successResponse(res, formatted, 'Danh sách đánh giá sản phẩm');
   } catch (error) {
     next(error);
   }
@@ -31,65 +39,74 @@ async function getProductReviews(req, res, next) {
 // Kiểm tra user hiện tại đã mua sản phẩm hay chưa
 async function checkEligibility(req, res, next) {
   try {
-    const userId = req.user.user_id;
-    const { productId } = req.params;
+    const userId = BigInt(req.user.user_id);
+    const productId = BigInt(req.params.productId);
 
     // 1. Kiểm tra xem user đã từng đánh giá sản phẩm này chưa
-    const [existing] = await pool.query(
-      `SELECT review_id, rating, content, created_at 
-       FROM reviews 
-       WHERE user_id = ? AND product_id = ? 
-       LIMIT 1`,
-      [userId, productId]
-    );
+    const existing = await prisma.review.findFirst({
+      where: {
+        user_id: userId,
+        product_id: productId,
+      },
+      select: {
+        review_id: true,
+        rating: true,
+        content: true,
+        created_at: true,
+      },
+    });
 
-    if (existing.length > 0) {
+    if (existing) {
       return successResponse(res, {
         can_review: false,
         already_reviewed: true,
-        review: existing[0],
-        message: 'Bạn đã đánh giá sản phẩm này rồi.'
+        review: existing,
+        message: 'Bạn đã đánh giá sản phẩm này rồi.',
       }, 'Trạng thái quyền đánh giá');
     }
 
     // 2. Kiểm tra xem user có đơn hàng hợp lệ chứa sản phẩm này không
-    const [purchases] = await pool.query(`
-      SELECT oi.order_item_id, o.order_id, o.order_status
-      FROM orders o
-      JOIN order_items oi ON o.order_id = oi.order_id
-      JOIN product_variants pv ON oi.variant_id = pv.variant_id
-      WHERE o.user_id = ?
-        AND pv.product_id = ?
-      ORDER BY 
-        CASE 
-          WHEN o.order_status = 'completed' THEN 1
-          WHEN o.order_status IN ('shipping', 'processing', 'confirmed') THEN 2
-          WHEN o.order_status = 'pending' THEN 3
-          ELSE 4
-        END ASC,
-        o.created_at DESC
-    `, [userId, productId]);
+    const purchases = await prisma.orderItem.findMany({
+      where: {
+        variant: { product_id: productId },
+        order: { user_id: userId },
+      },
+      include: {
+        order: {
+          select: {
+            order_id: true,
+            order_status: true,
+            created_at: true,
+          },
+        },
+      },
+      orderBy: {
+        order: { created_at: 'desc' },
+      },
+    });
 
     if (purchases.length === 0) {
       return successResponse(res, {
         can_review: false,
         already_reviewed: false,
         reason: 'not_purchased',
-        message: 'Chỉ khách hàng đã mua và nhận sản phẩm thành công tại GearK mới có thể gửi nhận xét.'
+        message: 'Chỉ khách hàng đã mua và nhận sản phẩm thành công tại GearK mới có thể gửi nhận xét.',
       }, 'Trạng thái quyền đánh giá');
     }
 
     // Chỉ cho phép đánh giá nếu đơn hàng đã hoàn tất thành công (order_status === 'completed')
-    const completedPurchases = purchases.filter(p => p.order_status === 'completed');
+    const completedPurchases = purchases.filter((p) => p.order?.order_status === 'completed');
 
     if (completedPurchases.length === 0) {
-      const activeOrder = purchases.find(p => ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order_status));
+      const activeOrder = purchases.find((p) =>
+        ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order?.order_status)
+      );
       if (activeOrder) {
         return successResponse(res, {
           can_review: false,
           already_reviewed: false,
           reason: 'order_in_progress',
-          message: 'Đơn hàng của bạn đang được xử lý hoặc giao hàng. Bạn chỉ có thể đánh giá sau khi đã nhận hàng thành công (Trạng thái: Đã hoàn thành).'
+          message: 'Đơn hàng của bạn đang được xử lý hoặc giao hàng. Bạn chỉ có thể đánh giá sau khi đã nhận hàng thành công (Trạng thái: Đã hoàn thành).',
         }, 'Trạng thái quyền đánh giá');
       }
 
@@ -97,7 +114,7 @@ async function checkEligibility(req, res, next) {
         can_review: false,
         already_reviewed: false,
         reason: 'order_cancelled',
-        message: 'Đơn hàng của bạn đã bị hủy hoặc hoàn tiền nên không thể gửi đánh giá.'
+        message: 'Đơn hàng của bạn đã bị hủy hoặc hoàn tiền nên không thể gửi đánh giá.',
       }, 'Trạng thái quyền đánh giá');
     }
 
@@ -105,7 +122,7 @@ async function checkEligibility(req, res, next) {
       can_review: true,
       already_reviewed: false,
       order_item_id: completedPurchases[0].order_item_id,
-      message: 'Bạn đủ điều kiện đánh giá sản phẩm này.'
+      message: 'Bạn đủ điều kiện đánh giá sản phẩm này.',
     }, 'Trạng thái quyền đánh giá');
   } catch (error) {
     next(error);
@@ -115,7 +132,7 @@ async function checkEligibility(req, res, next) {
 // [POST] /api/reviews
 async function createReview(req, res, next) {
   try {
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const { product_id, rating, content, order_item_id } = req.body;
 
     if (!product_id || !rating) {
@@ -127,41 +144,45 @@ async function createReview(req, res, next) {
       return errorResponse(res, 'Điểm đánh giá phải từ 1 đến 5 sao', 400);
     }
 
+    const parsedProductId = BigInt(product_id);
+
     // 1. Kiểm tra đã đánh giá chưa
-    const [existing] = await pool.query(
-      `SELECT review_id FROM reviews WHERE user_id = ? AND product_id = ? LIMIT 1`,
-      [userId, product_id]
-    );
-    if (existing.length > 0) {
+    const existing = await prisma.review.findFirst({
+      where: {
+        user_id: userId,
+        product_id: parsedProductId,
+      },
+    });
+    if (existing) {
       return errorResponse(res, 'Bạn đã gửi đánh giá cho sản phẩm này rồi!', 400);
     }
 
     // 2. Kiểm tra xem user đã mua sản phẩm này thành công (order_status = 'completed') hay chưa
-    const [purchases] = await pool.query(`
-      SELECT oi.order_item_id, o.order_status
-      FROM orders o
-      JOIN order_items oi ON o.order_id = oi.order_id
-      JOIN product_variants pv ON oi.variant_id = pv.variant_id
-      WHERE o.user_id = ?
-        AND pv.product_id = ?
-      ORDER BY 
-        CASE 
-          WHEN o.order_status = 'completed' THEN 1
-          WHEN o.order_status IN ('shipping', 'processing', 'confirmed') THEN 2
-          WHEN o.order_status = 'pending' THEN 3
-          ELSE 4
-        END ASC,
-        o.created_at DESC
-    `, [userId, product_id]);
+    const purchases = await prisma.orderItem.findMany({
+      where: {
+        variant: { product_id: parsedProductId },
+        order: { user_id: userId },
+      },
+      include: {
+        order: {
+          select: {
+            order_id: true,
+            order_status: true,
+          },
+        },
+      },
+    });
 
     if (purchases.length === 0) {
       return errorResponse(res, 'Chỉ khách hàng đã mua và nhận sản phẩm thành công tại GearK mới có thể gửi nhận xét!', 403);
     }
 
-    const completedPurchases = purchases.filter(p => p.order_status === 'completed');
+    const completedPurchases = purchases.filter((p) => p.order?.order_status === 'completed');
 
     if (completedPurchases.length === 0) {
-      const activeOrder = purchases.find(p => ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order_status));
+      const activeOrder = purchases.find((p) =>
+        ['pending', 'confirmed', 'processing', 'shipping'].includes(p.order?.order_status)
+      );
       if (activeOrder) {
         return errorResponse(
           res,
@@ -172,17 +193,23 @@ async function createReview(req, res, next) {
       return errorResponse(res, 'Đơn hàng chứa sản phẩm này đã bị hủy hoặc hoàn tiền nên không thể gửi nhận xét!', 400);
     }
 
-    const finalOrderItemId = order_item_id || completedPurchases[0].order_item_id || null;
+    const finalOrderItemId = order_item_id
+      ? BigInt(order_item_id)
+      : completedPurchases[0].order_item_id || null;
 
-    const [result] = await pool.query(
-      `INSERT INTO reviews (user_id, product_id, order_item_id, rating, content)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, product_id, finalOrderItemId, numRating, content || null]
-    );
+    const newReview = await prisma.review.create({
+      data: {
+        user_id: userId,
+        product_id: parsedProductId,
+        order_item_id: finalOrderItemId,
+        rating: numRating,
+        content: content ? content.trim() : null,
+      },
+    });
 
     return successResponse(
       res,
-      { review_id: result.insertId },
+      { review_id: newReview.review_id },
       'Đánh giá sản phẩm thành công',
       201
     );
@@ -194,22 +221,21 @@ async function createReview(req, res, next) {
 // [DELETE] /api/reviews/:id
 async function deleteReview(req, res, next) {
   try {
-    const { id } = req.params;
-    const userId = req.user.user_id;
+    const reviewId = BigInt(req.params.id);
+    const userId = BigInt(req.user.user_id);
     const isAdmin = req.user.role === 'admin';
 
-    let condition = 'review_id = ?';
-    let params = [id];
+    const existing = await prisma.review.findUnique({
+      where: { review_id: reviewId },
+    });
 
-    if (!isAdmin) {
-      condition += ' AND user_id = ?';
-      params.push(userId);
-    }
-
-    const [result] = await pool.query(`DELETE FROM reviews WHERE ${condition}`, params);
-    if (result.affectedRows === 0) {
+    if (!existing || (!isAdmin && existing.user_id !== userId)) {
       return errorResponse(res, 'Đánh giá không tồn tại hoặc bạn không có quyền xóa', 404);
     }
+
+    await prisma.review.delete({
+      where: { review_id: reviewId },
+    });
 
     return successResponse(res, null, 'Xóa đánh giá thành công');
   } catch (error) {
@@ -225,94 +251,97 @@ async function getAllReviewsAdmin(req, res, next) {
     const offset = (page - 1) * limit;
     const { rating, search } = req.query;
 
-    const conditions = ['1=1'];
-    const params = [];
+    const whereConditions = {};
 
     if (rating && !isNaN(rating)) {
-      conditions.push('r.rating = ?');
-      params.push(parseInt(rating));
+      whereConditions.rating = parseInt(rating);
     }
 
     if (search && search.trim()) {
-      const term = `%${search.trim()}%`;
-      conditions.push('(p.product_name LIKE ? OR u.full_name LIKE ? OR u.email LIKE ? OR r.content LIKE ?)');
-      params.push(term, term, term, term);
+      const term = search.trim();
+      whereConditions.OR = [
+        { product: { product_name: { contains: term } } },
+        { user: { full_name: { contains: term } } },
+        { user: { email: { contains: term } } },
+        { content: { contains: term } },
+      ];
     }
 
-    const whereClause = conditions.join(' AND ');
-
-    // 1. Thống kê tổng quan đánh giá
-    const [summaryRows] = await pool.query(`
-      SELECT 
-        COUNT(*) AS total_reviews,
-        COALESCE(AVG(rating), 5.0) AS avg_rating,
-        SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) AS count_5_star,
-        SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS count_4_star,
-        SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS count_3_star,
-        SUM(CASE WHEN rating <= 2 THEN 1 ELSE 0 END) AS count_low_star
-      FROM reviews
-    `);
-
-    const summary = summaryRows[0] || {
-      total_reviews: 0,
-      avg_rating: 5.0,
-      count_5_star: 0,
-      count_4_star: 0,
-      count_3_star: 0,
-      count_low_star: 0,
-    };
-
-    // 2. Đếm số lượng theo bộ lọc
-    const [countRows] = await pool.query(`
-      SELECT COUNT(*) AS total
-      FROM reviews r
-      JOIN users u ON r.user_id = u.user_id
-      JOIN products p ON r.product_id = p.product_id
-      WHERE ${whereClause}
-    `, params);
-
-    const total = countRows[0]?.total || 0;
-
-    // 3. Lấy danh sách đánh giá phân trang
-    const queryParams = [...params, limit, offset];
-    const [items] = await pool.query(`
-      SELECT 
-        r.review_id,
-        r.product_id,
-        r.user_id,
-        r.order_item_id,
-        r.rating,
-        r.content,
-        r.created_at,
-        p.product_name,
-        p.thumbnail_url,
-        u.full_name,
-        u.email
-      FROM reviews r
-      JOIN users u ON r.user_id = u.user_id
-      JOIN products p ON r.product_id = p.product_id
-      WHERE ${whereClause}
-      ORDER BY r.created_at DESC
-      LIMIT ? OFFSET ?
-    `, queryParams);
-
-    return successResponse(res, {
+    // 1. Thống kê tổng quan
+    const [
+      total_reviews,
+      avgResult,
+      count_5_star,
+      count_4_star,
+      count_3_star,
+      count_low_star,
+      total,
       items,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+    ] = await Promise.all([
+      prisma.review.count(),
+      prisma.review.aggregate({ _avg: { rating: true } }),
+      prisma.review.count({ where: { rating: 5 } }),
+      prisma.review.count({ where: { rating: 4 } }),
+      prisma.review.count({ where: { rating: 3 } }),
+      prisma.review.count({ where: { rating: { lte: 2 } } }),
+      prisma.review.count({ where: whereConditions }),
+      prisma.review.findMany({
+        where: whereConditions,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit,
+        include: {
+          product: {
+            select: {
+              product_name: true,
+              thumbnail_url: true,
+            },
+          },
+          user: {
+            select: {
+              full_name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const formattedItems = items.map((r) => ({
+      review_id: r.review_id,
+      product_id: r.product_id,
+      user_id: r.user_id,
+      order_item_id: r.order_item_id,
+      rating: r.rating,
+      content: r.content,
+      created_at: r.created_at,
+      product_name: r.product?.product_name || 'Sản phẩm',
+      thumbnail_url: r.product?.thumbnail_url || null,
+      full_name: r.user?.full_name || 'Khách hàng',
+      email: r.user?.email || '',
+    }));
+
+    return successResponse(
+      res,
+      {
+        items: formattedItems,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+        summary: {
+          total_reviews,
+          avg_rating: avgResult._avg?.rating ? Number(avgResult._avg.rating) : 5.0,
+          count_5_star,
+          count_4_star,
+          count_3_star,
+          count_low_star,
+        },
       },
-      summary: {
-        total_reviews: Number(summary.total_reviews) || 0,
-        avg_rating: Number(summary.avg_rating) || 5.0,
-        count_5_star: Number(summary.count_5_star) || 0,
-        count_4_star: Number(summary.count_4_star) || 0,
-        count_3_star: Number(summary.count_3_star) || 0,
-        count_low_star: Number(summary.count_low_star) || 0,
-      }
-    }, 'Danh sách đánh giá sản phẩm (Admin)');
+      'Danh sách đánh giá sản phẩm (Admin)'
+    );
   } catch (error) {
     next(error);
   }
@@ -323,6 +352,5 @@ module.exports = {
   checkEligibility,
   createReview,
   deleteReview,
-  getAllReviewsAdmin
+  getAllReviewsAdmin,
 };
-

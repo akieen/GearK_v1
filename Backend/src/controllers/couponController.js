@@ -1,10 +1,37 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
+
+// Helper to parse date params safely into Date object
+function parseDateParam(dateInput, isEndOfDay = false) {
+  if (!dateInput) return null;
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (!trimmed) return null;
+    if (trimmed.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const d = new Date(trimmed);
+      if (isEndOfDay) d.setHours(23, 59, 59, 999);
+      else d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      if (isEndOfDay) d.setHours(23, 59, 59, 999);
+      else d.setHours(0, 0, 0, 0);
+      return d;
+    }
+  }
+  if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
+    return dateInput;
+  }
+  return null;
+}
 
 // [GET] /api/coupons (Admin only or public list)
 async function getCoupons(req, res, next) {
   try {
-    const [coupons] = await pool.query('SELECT * FROM coupons ORDER BY coupon_id DESC');
+    const coupons = await prisma.coupon.findMany({
+      orderBy: { coupon_id: 'desc' },
+    });
     return successResponse(res, coupons, 'Danh sách mã giảm giá');
   } catch (error) {
     next(error);
@@ -20,16 +47,14 @@ async function validateCoupon(req, res, next) {
       return errorResponse(res, 'Vui lòng nhập mã giảm giá', 400);
     }
 
-    const [rows] = await pool.query(
-      'SELECT * FROM coupons WHERE coupon_code = ? LIMIT 1',
-      [coupon_code.trim().toUpperCase()]
-    );
+    const coupon = await prisma.coupon.findUnique({
+      where: { coupon_code: coupon_code.trim().toUpperCase() },
+    });
 
-    if (rows.length === 0) {
+    if (!coupon) {
       return errorResponse(res, 'Mã giảm giá không hợp lệ hoặc không tồn tại', 404);
     }
 
-    const coupon = rows[0];
     const now = new Date();
 
     // 1. Kiểm tra ngày bắt đầu hiệu lực
@@ -75,28 +100,6 @@ async function validateCoupon(req, res, next) {
   }
 }
 
-// Helper to parse date params safely into MySQL format
-function parseDateParam(dateInput, isEndOfDay = false) {
-  if (!dateInput) return null;
-  if (typeof dateInput === 'string') {
-    const trimmed = dateInput.trim();
-    if (!trimmed) return null;
-    if (trimmed.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return isEndOfDay ? `${trimmed} 23:59:59` : `${trimmed} 00:00:00`;
-    }
-    const d = new Date(trimmed);
-    if (!isNaN(d.getTime())) {
-      if (isEndOfDay) d.setHours(23, 59, 59, 999);
-      else d.setHours(0, 0, 0, 0);
-      return d;
-    }
-  }
-  if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
-    return dateInput;
-  }
-  return null;
-}
-
 // [POST] /api/coupons (Admin / Staff)
 async function createCoupon(req, res, next) {
   try {
@@ -113,8 +116,10 @@ async function createCoupon(req, res, next) {
     const cleanCode = coupon_code.trim().toUpperCase();
 
     // Kiểm tra trùng mã coupon
-    const [existing] = await pool.query('SELECT coupon_id FROM coupons WHERE coupon_code = ? LIMIT 1', [cleanCode]);
-    if (existing.length > 0) {
+    const existing = await prisma.coupon.findUnique({
+      where: { coupon_code: cleanCode },
+    });
+    if (existing) {
       return errorResponse(res, `Mã giảm giá "${cleanCode}" đã tồn tại trên hệ thống. Vui lòng chọn mã khác!`, 400);
     }
 
@@ -129,19 +134,18 @@ async function createCoupon(req, res, next) {
       return errorResponse(res, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu', 400);
     }
 
-    const [result] = await pool.query(
-      'INSERT INTO coupons (coupon_code, discount_type, discount_value, usage_limit, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
-      [
-        cleanCode,
+    const created = await prisma.coupon.create({
+      data: {
+        coupon_code: cleanCode,
         discount_type,
-        Number(discount_value),
-        limitValue,
-        startDateVal,
-        endDateVal
-      ]
-    );
+        discount_value: Number(discount_value),
+        usage_limit: limitValue,
+        start_date: startDateVal,
+        end_date: endDateVal,
+      },
+    });
 
-    return successResponse(res, { coupon_id: result.insertId, coupon_code: cleanCode }, 'Tạo mã giảm giá thành công', 201);
+    return successResponse(res, { coupon_id: created.coupon_id, coupon_code: cleanCode }, 'Tạo mã giảm giá thành công', 201);
   } catch (error) {
     next(error);
   }
@@ -150,31 +154,35 @@ async function createCoupon(req, res, next) {
 // [PUT] /api/coupons/:id (Admin / Staff)
 async function updateCoupon(req, res, next) {
   try {
-    const { id } = req.params;
+    const couponId = BigInt(req.params.id);
     const { coupon_code, discount_type, discount_value, usage_limit, start_date, end_date } = req.body;
 
-    const [existing] = await pool.query('SELECT * FROM coupons WHERE coupon_id = ?', [id]);
-    if (existing.length === 0) {
+    const existing = await prisma.coupon.findUnique({
+      where: { coupon_id: couponId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Mã giảm giá không tồn tại', 404);
     }
 
-    const cleanCode = coupon_code ? coupon_code.trim().toUpperCase() : existing[0].coupon_code;
+    const cleanCode = coupon_code ? coupon_code.trim().toUpperCase() : existing.coupon_code;
 
     // Kiểm tra trùng mã code với coupon khác
-    const [duplicate] = await pool.query(
-      'SELECT coupon_id FROM coupons WHERE coupon_code = ? AND coupon_id != ? LIMIT 1',
-      [cleanCode, id]
-    );
-    if (duplicate.length > 0) {
+    const duplicate = await prisma.coupon.findFirst({
+      where: {
+        coupon_code: cleanCode,
+        NOT: { coupon_id: couponId },
+      },
+    });
+    if (duplicate) {
       return errorResponse(res, `Mã giảm giá "${cleanCode}" đã tồn tại trên hệ thống. Vui lòng chọn mã khác!`, 400);
     }
 
-    let startDateVal = existing[0].start_date;
+    let startDateVal = existing.start_date;
     if (start_date !== undefined) {
       startDateVal = parseDateParam(start_date, false);
     }
 
-    let endDateVal = existing[0].end_date;
+    let endDateVal = existing.end_date;
     if (end_date !== undefined) {
       endDateVal = parseDateParam(end_date, true);
     }
@@ -183,18 +191,23 @@ async function updateCoupon(req, res, next) {
       return errorResponse(res, 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu', 400);
     }
 
-    const type = discount_type || existing[0].discount_type;
-    const val = discount_value !== undefined ? Number(discount_value) : existing[0].discount_value;
+    const type = discount_type || existing.discount_type;
+    const val = discount_value !== undefined ? Number(discount_value) : existing.discount_value;
     const limit = (usage_limit !== undefined && usage_limit !== null && usage_limit !== '')
       ? parseInt(usage_limit, 10)
       : null;
 
-    await pool.query(
-      `UPDATE coupons 
-       SET coupon_code = ?, discount_type = ?, discount_value = ?, usage_limit = ?, start_date = ?, end_date = ?
-       WHERE coupon_id = ?`,
-      [cleanCode, type, val, limit, startDateVal, endDateVal, id]
-    );
+    await prisma.coupon.update({
+      where: { coupon_id: couponId },
+      data: {
+        coupon_code: cleanCode,
+        discount_type: type,
+        discount_value: val,
+        usage_limit: limit,
+        start_date: startDateVal,
+        end_date: endDateVal,
+      },
+    });
 
     return successResponse(res, null, 'Cập nhật mã giảm giá thành công');
   } catch (error) {
@@ -204,39 +217,40 @@ async function updateCoupon(req, res, next) {
 
 // [POST] /api/coupons/:id/use (Internal - tăng used_count sau khi đặt hàng)
 async function incrementCouponUsage(couponId) {
-  await pool.query(
-    'UPDATE coupons SET used_count = used_count + 1 WHERE coupon_id = ?',
-    [couponId]
-  );
+  await prisma.coupon.update({
+    where: { coupon_id: BigInt(couponId) },
+    data: {
+      used_count: {
+        increment: 1,
+      },
+    },
+  });
 }
 
 // [DELETE] /api/coupons/:id (Admin / Staff)
 async function deleteCoupon(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
+    const couponId = BigInt(req.params.id);
 
-    const { id } = req.params;
-
-    const [existing] = await connection.query('SELECT coupon_id, coupon_code FROM coupons WHERE coupon_id = ?', [id]);
-    if (existing.length === 0) {
-      await connection.rollback();
+    const existing = await prisma.coupon.findUnique({
+      where: { coupon_id: couponId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Mã giảm giá không tồn tại', 404);
     }
 
-    // Xóa liên kết trong order_coupons trước để tránh lỗi ràng buộc khóa ngoại RESTRICT
-    await connection.query('DELETE FROM order_coupons WHERE coupon_id = ?', [id]);
+    await prisma.$transaction([
+      prisma.orderCoupon.deleteMany({
+        where: { coupon_id: couponId },
+      }),
+      prisma.coupon.delete({
+        where: { coupon_id: couponId },
+      }),
+    ]);
 
-    // Xóa mã giảm giá
-    await connection.query('DELETE FROM coupons WHERE coupon_id = ?', [id]);
-
-    await connection.commit();
-    return successResponse(res, null, `Đã xóa mã giảm giá "${existing[0].coupon_code}" thành công`);
+    return successResponse(res, null, `Đã xóa mã giảm giá "${existing.coupon_code}" thành công`);
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
@@ -246,5 +260,5 @@ module.exports = {
   createCoupon,
   updateCoupon,
   deleteCoupon,
-  incrementCouponUsage
+  incrementCouponUsage,
 };

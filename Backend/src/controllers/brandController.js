@@ -1,25 +1,29 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { slugify, successResponse, errorResponse } = require('../utils/helpers');
 
 // [GET] /api/brands
 async function getBrands(req, res, next) {
   try {
-    const [brands] = await pool.query(`
-      SELECT 
-        b.brand_id,
-        b.brand_name,
-        b.slug,
-        b.logo_url,
-        b.created_at,
-        b.updated_at,
-        COUNT(p.product_id) AS product_count
-      FROM brands b
-      LEFT JOIN products p ON p.brand_id = b.brand_id
-      GROUP BY b.brand_id
-      ORDER BY b.brand_name ASC
-    `);
+    const brands = await prisma.brand.findMany({
+      orderBy: { brand_name: 'asc' },
+      include: {
+        _count: {
+          select: { products: true },
+        },
+      },
+    });
 
-    return successResponse(res, brands, 'Danh sách thương hiệu');
+    const formatted = brands.map((b) => ({
+      brand_id: b.brand_id,
+      brand_name: b.brand_name,
+      slug: b.slug,
+      logo_url: b.logo_url,
+      created_at: b.created_at,
+      updated_at: b.updated_at,
+      product_count: b._count.products,
+    }));
+
+    return successResponse(res, formatted, 'Danh sách thương hiệu');
   } catch (error) {
     next(error);
   }
@@ -30,16 +34,15 @@ async function getBrandBySlug(req, res, next) {
   try {
     const { slug } = req.params;
 
-    const [rows] = await pool.query(
-      'SELECT * FROM brands WHERE slug = ? LIMIT 1',
-      [slug]
-    );
+    const brand = await prisma.brand.findUnique({
+      where: { slug },
+    });
 
-    if (rows.length === 0) {
+    if (!brand) {
       return errorResponse(res, 'Không tìm thấy thương hiệu', 404);
     }
 
-    return successResponse(res, rows[0], 'Chi tiết thương hiệu');
+    return successResponse(res, brand, 'Chi tiết thương hiệu');
   } catch (error) {
     next(error);
   }
@@ -56,18 +59,21 @@ async function createBrand(req, res, next) {
 
     const finalSlug = slug ? slugify(slug) : slugify(brand_name);
 
-    const [result] = await pool.query(
-      'INSERT INTO brands (brand_name, slug, logo_url) VALUES (?, ?, ?)',
-      [brand_name, finalSlug, logo_url || null]
-    );
+    const brand = await prisma.brand.create({
+      data: {
+        brand_name: brand_name.trim(),
+        slug: finalSlug,
+        logo_url: logo_url || null,
+      },
+    });
 
     return successResponse(
       res,
       {
-        brand_id: result.insertId,
-        brand_name,
-        slug: finalSlug,
-        logo_url: logo_url || null
+        brand_id: brand.brand_id,
+        brand_name: brand.brand_name,
+        slug: brand.slug,
+        logo_url: brand.logo_url,
       },
       'Thêm thương hiệu thành công',
       201
@@ -80,22 +86,28 @@ async function createBrand(req, res, next) {
 // [PUT] /api/brands/:id (Admin only)
 async function updateBrand(req, res, next) {
   try {
-    const { id } = req.params;
+    const brandId = BigInt(req.params.id);
     const { brand_name, slug, logo_url } = req.body;
 
-    const [existing] = await pool.query('SELECT * FROM brands WHERE brand_id = ?', [id]);
-    if (existing.length === 0) {
+    const existing = await prisma.brand.findUnique({
+      where: { brand_id: brandId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Thương hiệu không tồn tại', 404);
     }
 
-    const newSlug = slug ? slugify(slug) : (brand_name ? slugify(brand_name) : existing[0].slug);
-    const newName = brand_name || existing[0].brand_name;
-    const newLogo = logo_url !== undefined ? logo_url : existing[0].logo_url;
+    const newSlug = slug ? slugify(slug) : (brand_name ? slugify(brand_name) : existing.slug);
+    const newName = brand_name ? brand_name.trim() : existing.brand_name;
+    const newLogo = logo_url !== undefined ? logo_url : existing.logo_url;
 
-    await pool.query(
-      'UPDATE brands SET brand_name = ?, slug = ?, logo_url = ? WHERE brand_id = ?',
-      [newName, newSlug, newLogo, id]
-    );
+    await prisma.brand.update({
+      where: { brand_id: brandId },
+      data: {
+        brand_name: newName,
+        slug: newSlug,
+        logo_url: newLogo,
+      },
+    });
 
     return successResponse(res, null, 'Cập nhật thương hiệu thành công');
   } catch (error) {
@@ -106,17 +118,25 @@ async function updateBrand(req, res, next) {
 // [DELETE] /api/brands/:id (Admin only)
 async function deleteBrand(req, res, next) {
   try {
-    const { id } = req.params;
+    const brandId = BigInt(req.params.id);
 
-    const [products] = await pool.query('SELECT COUNT(*) AS count FROM products WHERE brand_id = ?', [id]);
-    if (products[0].count > 0) {
+    const productCount = await prisma.product.count({
+      where: { brand_id: brandId },
+    });
+    if (productCount > 0) {
       return errorResponse(res, 'Không thể xóa thương hiệu đang có sản phẩm liên kết', 400);
     }
 
-    const [result] = await pool.query('DELETE FROM brands WHERE brand_id = ?', [id]);
-    if (result.affectedRows === 0) {
+    const existing = await prisma.brand.findUnique({
+      where: { brand_id: brandId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Thương hiệu không tồn tại', 404);
     }
+
+    await prisma.brand.delete({
+      where: { brand_id: brandId },
+    });
 
     return successResponse(res, null, 'Xóa thương hiệu thành công');
   } catch (error) {
@@ -129,5 +149,5 @@ module.exports = {
   getBrandBySlug,
   createBrand,
   updateBrand,
-  deleteBrand
+  deleteBrand,
 };

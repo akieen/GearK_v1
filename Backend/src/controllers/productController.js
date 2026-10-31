@@ -1,5 +1,6 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { slugify, generateSku, successResponse, errorResponse } = require('../utils/helpers');
+const variantController = require('./variantController');
 
 // [GET] /api/products
 async function getProducts(req, res, next) {
@@ -15,121 +16,152 @@ async function getProducts(req, res, next) {
       min_price,
       max_price,
       status = 'active',
-      sort = 'newest'
+      sort = 'newest',
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereConditions = [];
-    const params = [];
+    const whereConditions = {};
 
-    // Filter by status (admin can pass status=all)
     if (status !== 'all') {
-      whereConditions.push('p.status = ?');
-      params.push(status);
+      whereConditions.status = status;
     }
 
-    // Filter by category
     if (category_id) {
-      whereConditions.push('p.category_id = ?');
-      params.push(category_id);
+      whereConditions.category_id = BigInt(category_id);
     } else if (category_slug) {
-      whereConditions.push('c.slug = ?');
-      params.push(category_slug);
+      whereConditions.category = { slug: category_slug };
     }
 
-    // Filter by brand
     if (brand_id) {
-      whereConditions.push('p.brand_id = ?');
-      params.push(brand_id);
+      whereConditions.brand_id = BigInt(brand_id);
     } else if (brand_slug) {
-      whereConditions.push('b.slug = ?');
-      params.push(brand_slug);
+      whereConditions.brand = { slug: brand_slug };
     }
 
-    // Keyword search
     if (search && search.trim() !== '') {
-      whereConditions.push('(p.product_name LIKE ? OR p.description LIKE ?)');
-      const keyword = `%${search.trim()}%`;
-      params.push(keyword, keyword);
+      const keyword = search.trim();
+      whereConditions.OR = [
+        { product_name: { contains: keyword } },
+        { description: { contains: keyword } },
+      ];
     }
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    // Filter by price range through variants if requested
+    if (min_price || max_price) {
+      const priceFilter = {};
+      if (min_price) priceFilter.gte = Number(min_price);
+      if (max_price) priceFilter.lte = Number(max_price);
+      whereConditions.variants = {
+        some: {
+          price: priceFilter,
+        },
+      };
+    }
 
-    // Count total products
-    const countSql = `
-      SELECT COUNT(DISTINCT p.product_id) AS total
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.category_id
-      LEFT JOIN brands b ON p.brand_id = b.brand_id
-      ${whereClause}
-    `;
-    const [countResult] = await pool.query(countSql, params);
-    const total = countResult[0].total;
+    let orderBy = [{ created_at: 'desc' }];
+    if (sort === 'name_asc') {
+      orderBy = [{ product_name: 'asc' }];
+    }
 
-    // Sorting logic
-    let orderByClause = 'ORDER BY p.created_at DESC';
+    const [total, products] = await Promise.all([
+      prisma.product.count({ where: whereConditions }),
+      prisma.product.findMany({
+        where: whereConditions,
+        orderBy,
+        skip: offset,
+        take: limitNum,
+        include: {
+          category: {
+            select: { category_id: true, category_name: true, slug: true },
+          },
+          brand: {
+            select: { brand_id: true, brand_name: true, slug: true },
+          },
+          variants: {
+            select: {
+              variant_id: true,
+              price: true,
+              sale_price: true,
+              stock: true,
+            },
+          },
+          reviews: {
+            select: {
+              review_id: true,
+              rating: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const formattedRows = products.map((p) => {
+      const variantPrices = p.variants.map((v) => Number(v.price));
+      const salePrices = p.variants.filter((v) => v.sale_price !== null).map((v) => Number(v.sale_price));
+      const min_price = variantPrices.length > 0 ? Math.min(...variantPrices) : 0;
+      const max_price = variantPrices.length > 0 ? Math.max(...variantPrices) : 0;
+      const min_sale_price = salePrices.length > 0 ? Math.min(...salePrices) : min_price;
+      const total_stock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+      const variant_count = p.variants.length;
+      const variant_id = p.variants.length > 0 ? p.variants[0].variant_id : null;
+
+      const review_count = p.reviews.length;
+      const avg_rating =
+        review_count > 0
+          ? Number((p.reviews.reduce((sum, r) => sum + r.rating, 0) / review_count).toFixed(1))
+          : 0;
+
+      return {
+        product_id: p.product_id,
+        product_name: p.product_name,
+        slug: p.slug,
+        description: p.description,
+        thumbnail_url: p.thumbnail_url,
+        status: p.status,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        category_id: p.category_id,
+        category_name: p.category?.category_name || null,
+        category_slug: p.category?.slug || null,
+        brand_id: p.brand_id,
+        brand_name: p.brand?.brand_name || null,
+        brand_slug: p.brand?.slug || null,
+        variant_id,
+        min_price,
+        max_price,
+        min_sale_price,
+        total_stock,
+        variant_count,
+        avg_rating,
+        review_count,
+      };
+    });
+
+    // In-memory sort for price or rating if needed
     if (sort === 'price_asc') {
-      orderByClause = 'ORDER BY min_price ASC';
+      formattedRows.sort((a, b) => a.min_price - b.min_price);
     } else if (sort === 'price_desc') {
-      orderByClause = 'ORDER BY min_price DESC';
-    } else if (sort === 'name_asc') {
-      orderByClause = 'ORDER BY p.product_name ASC';
+      formattedRows.sort((a, b) => b.min_price - a.min_price);
     } else if (sort === 'rating') {
-      orderByClause = 'ORDER BY avg_rating DESC';
+      formattedRows.sort((a, b) => b.avg_rating - a.avg_rating);
     }
 
-    // Main query with variant price & stock aggregation
-    const dataSql = `
-      SELECT 
-        p.product_id,
-        p.product_name,
-        p.slug,
-        p.description,
-        p.thumbnail_url,
-        p.status,
-        p.created_at,
-        p.updated_at,
-        c.category_id,
-        c.category_name,
-        c.slug AS category_slug,
-        b.brand_id,
-        b.brand_name,
-        b.slug AS brand_slug,
-        MIN(v.variant_id) AS variant_id,
-        MIN(v.price) AS min_price,
-        MAX(v.price) AS max_price,
-        MIN(v.sale_price) AS min_sale_price,
-        COALESCE(SUM(v.stock), 0) AS total_stock,
-        COUNT(DISTINCT v.variant_id) AS variant_count,
-        COALESCE(ROUND(AVG(r.rating), 1), 0) AS avg_rating,
-        COUNT(DISTINCT r.review_id) AS review_count
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.category_id
-      LEFT JOIN brands b ON p.brand_id = b.brand_id
-      LEFT JOIN product_variants v ON p.product_id = v.product_id
-      LEFT JOIN reviews r ON p.product_id = r.product_id
-      ${whereClause}
-      GROUP BY p.product_id
-      ${min_price ? `HAVING min_price >= ${Number(min_price)}` : ''}
-      ${max_price ? `${min_price ? 'AND' : 'HAVING'} min_price <= ${Number(max_price)}` : ''}
-      ${orderByClause}
-      LIMIT ? OFFSET ?
-    `;
-
-    const [rows] = await pool.query(dataSql, [...params, limitNum, offset]);
-
-    return successResponse(res, {
-      items: rows,
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(total / limitNum)
-      }
-    }, 'Lấy danh sách sản phẩm thành công');
+    return successResponse(
+      res,
+      {
+        items: formattedRows,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      },
+      'Lấy danh sách sản phẩm thành công'
+    );
   } catch (error) {
     next(error);
   }
@@ -140,43 +172,46 @@ async function getProductBySlug(req, res, next) {
   try {
     const { slug } = req.params;
 
-    // Fetch product
-    const [products] = await pool.query(`
-      SELECT 
-        p.*,
-        c.category_name,
-        c.slug AS category_slug,
-        b.brand_name,
-        b.slug AS brand_slug,
-        b.logo_url AS brand_logo,
-        COALESCE(ROUND(AVG(r.rating), 1), 0) AS avg_rating,
-        COUNT(DISTINCT r.review_id) AS review_count
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.category_id
-      LEFT JOIN brands b ON p.brand_id = b.brand_id
-      LEFT JOIN reviews r ON p.product_id = r.product_id
-      WHERE p.slug = ?
-      GROUP BY p.product_id
-      LIMIT 1
-    `, [slug]);
+    const product = await prisma.product.findUnique({
+      where: { slug },
+      include: {
+        category: {
+          select: { category_name: true, slug: true },
+        },
+        brand: {
+          select: { brand_name: true, slug: true, logo_url: true },
+        },
+        variants: {
+          orderBy: { price: 'asc' },
+          include: {
+            images: {
+              orderBy: { sort_order: 'asc' },
+            },
+          },
+        },
+        images: {
+          orderBy: [
+            { is_primary: 'desc' },
+            { sort_order: 'asc' },
+          ],
+        },
+        reviews: {
+          select: { review_id: true, rating: true },
+        },
+      },
+    });
 
-    if (products.length === 0) {
+    if (!product) {
       return errorResponse(res, 'Không tìm thấy sản phẩm', 404);
     }
 
-    const product = products[0];
+    const review_count = product.reviews.length;
+    const avg_rating =
+      review_count > 0
+        ? Number((product.reviews.reduce((sum, r) => sum + r.rating, 0) / review_count).toFixed(1))
+        : 0;
 
-    // Fetch product variants
-    const [variants] = await pool.query(`
-      SELECT 
-        v.*
-      FROM product_variants v
-      WHERE v.product_id = ?
-      ORDER BY v.price ASC
-    `, [product.product_id]);
-
-    // Parse specifications JSON if string
-    const parsedVariants = variants.map(v => {
+    const parsedVariants = product.variants.map((v) => {
       let specs = v.specifications;
       if (typeof specs === 'string') {
         try {
@@ -187,42 +222,34 @@ async function getProductBySlug(req, res, next) {
       }
       return {
         ...v,
-        specifications: specs
+        specifications: specs,
+        images: v.images || [],
       };
     });
 
-    // Fetch product images
-    const [images] = await pool.query(`
-      SELECT image_id, image_url, alt_text, is_primary, sort_order
-      FROM product_images
-      WHERE product_id = ?
-      ORDER BY is_primary DESC, sort_order ASC
-    `, [product.product_id]);
+    const result = {
+      product_id: product.product_id,
+      category_id: product.category_id,
+      brand_id: product.brand_id,
+      product_name: product.product_name,
+      slug: product.slug,
+      description: product.description,
+      thumbnail_url: product.thumbnail_url,
+      status: product.status,
+      created_at: product.created_at,
+      updated_at: product.updated_at,
+      category_name: product.category?.category_name || null,
+      category_slug: product.category?.slug || null,
+      brand_name: product.brand?.brand_name || null,
+      brand_slug: product.brand?.slug || null,
+      brand_logo: product.brand?.logo_url || null,
+      avg_rating,
+      review_count,
+      images: product.images,
+      variants: parsedVariants,
+    };
 
-    // Fetch variant images if any
-    const variantIds = parsedVariants.map(v => v.variant_id);
-    let variantImages = [];
-    if (variantIds.length > 0) {
-      const [vImages] = await pool.query(`
-        SELECT image_id, variant_id, image_url, is_primary, sort_order
-        FROM variant_images
-        WHERE variant_id IN (?)
-        ORDER BY sort_order ASC
-      `, [variantIds]);
-      variantImages = vImages;
-    }
-
-    // Attach variant images to corresponding variants
-    const variantsWithImages = parsedVariants.map(v => ({
-      ...v,
-      images: variantImages.filter(img => img.variant_id === v.variant_id)
-    }));
-
-    return successResponse(res, {
-      ...product,
-      images,
-      variants: variantsWithImages
-    }, 'Chi tiết sản phẩm');
+    return successResponse(res, result, 'Chi tiết sản phẩm');
   } catch (error) {
     next(error);
   }
@@ -233,12 +260,15 @@ async function getProductById(req, res, next) {
   try {
     const { id } = req.params;
 
-    const [products] = await pool.query('SELECT slug FROM products WHERE product_id = ? LIMIT 1', [id]);
-    if (products.length === 0) {
+    const product = await prisma.product.findUnique({
+      where: { product_id: BigInt(id) },
+      select: { slug: true },
+    });
+    if (!product) {
       return errorResponse(res, 'Không tìm thấy sản phẩm', 404);
     }
 
-    req.params.slug = products[0].slug;
+    req.params.slug = product.slug;
     return getProductBySlug(req, res, next);
   } catch (error) {
     next(error);
@@ -247,10 +277,7 @@ async function getProductById(req, res, next) {
 
 // [POST] /api/products (Admin only)
 async function createProduct(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-
     const {
       product_name,
       slug,
@@ -260,7 +287,7 @@ async function createProduct(req, res, next) {
       thumbnail_url,
       status = 'draft',
       variants = [],
-      images = []
+      images = [],
     } = req.body;
 
     if (!product_name || !category_id) {
@@ -268,112 +295,133 @@ async function createProduct(req, res, next) {
     }
 
     const finalSlug = slug ? slugify(slug) : slugify(product_name);
+    const parsedCategoryId = BigInt(category_id);
+    const parsedBrandId = brand_id ? BigInt(brand_id) : null;
 
-    // Insert product
-    const [prodResult] = await connection.query(
-      `INSERT INTO products (product_name, slug, category_id, brand_id, description, thumbnail_url, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [product_name, finalSlug, category_id, brand_id || null, description || null, thumbnail_url || null, status]
-    );
+    const createdProduct = await prisma.$transaction(async (tx) => {
+      const prod = await tx.product.create({
+        data: {
+          product_name: product_name.trim(),
+          slug: finalSlug,
+          category_id: parsedCategoryId,
+          brand_id: parsedBrandId,
+          description: description ? description.trim() : null,
+          thumbnail_url: thumbnail_url ? thumbnail_url.trim() : null,
+          status,
+        },
+      });
 
-    const productId = prodResult.insertId;
+      // Insert variants
+      if (Array.isArray(variants) && variants.length > 0) {
+        for (const v of variants) {
+          const sku =
+            v.sku && typeof v.sku === 'string' && v.sku.trim()
+              ? v.sku.trim().toUpperCase()
+              : generateSku(product_name, v.variant_name);
+          const specs = v.specifications ? JSON.stringify(v.specifications) : null;
 
-    // Insert variants
-    if (Array.isArray(variants) && variants.length > 0) {
-      for (const v of variants) {
-        const sku = (v.sku && typeof v.sku === 'string' && v.sku.trim())
-          ? v.sku.trim().toUpperCase()
-          : generateSku(product_name, v.variant_name);
-        const specs = v.specifications ? JSON.stringify(v.specifications) : null;
-        const [varRes] = await connection.query(
-          `INSERT INTO product_variants 
-            (product_id, sku, variant_name, specifications, price, sale_price, stock, warranty_months)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            productId,
-            sku,
-            v.variant_name || product_name,
-            specs,
-            v.price || 0,
-            v.sale_price || null,
-            v.stock || 0,
-            v.warranty_months || 12
-          ]
-        );
-        const variantId = varRes.insertId;
+          const createdVar = await tx.productVariant.create({
+            data: {
+              product_id: prod.product_id,
+              sku,
+              variant_name: v.variant_name || product_name,
+              specifications: specs,
+              price: Number(v.price) || 0,
+              sale_price: v.sale_price !== undefined && v.sale_price !== null ? Number(v.sale_price) : null,
+              stock: parseInt(v.stock, 10) || 0,
+              warranty_months: parseInt(v.warranty_months, 10) || 12,
+            },
+          });
 
-        // Insert variant images
-        if (Array.isArray(v.images) && v.images.length > 0) {
-          for (let i = 0; i < v.images.length; i++) {
-            const img = v.images[i];
-            const imgUrl = typeof img === 'string' ? img : img.image_url;
-            if (!imgUrl) continue;
-            const isPrimary = (typeof img === 'object' && img.is_primary) ? 1 : (i === 0 ? 1 : 0);
-            await connection.query(
-              `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
-               VALUES (?, ?, ?, ?)`,
-              [variantId, imgUrl, isPrimary, i]
-            );
+          // Insert variant images
+          if (Array.isArray(v.images) && v.images.length > 0) {
+            const varImgs = [];
+            for (let i = 0; i < v.images.length; i++) {
+              const img = v.images[i];
+              const imgUrl = typeof img === 'string' ? img : img?.image_url;
+              if (!imgUrl) continue;
+              const isPrimary = typeof img === 'object' && img?.is_primary ? true : i === 0;
+              varImgs.push({
+                variant_id: createdVar.variant_id,
+                image_url: imgUrl,
+                is_primary: isPrimary,
+                sort_order: i,
+              });
+            }
+            if (varImgs.length > 0) {
+              await tx.variantImage.createMany({ data: varImgs });
+            }
           }
         }
+      } else {
+        // Create default variant
+        const defaultSku = generateSku(product_name, 'Tiêu chuẩn');
+        const defaultVar = await tx.productVariant.create({
+          data: {
+            product_id: prod.product_id,
+            sku: defaultSku,
+            variant_name: 'Tiêu chuẩn',
+            price: 0,
+            stock: 0,
+            warranty_months: 12,
+          },
+        });
+        if (thumbnail_url) {
+          await tx.variantImage.create({
+            data: {
+              variant_id: defaultVar.variant_id,
+              image_url: thumbnail_url,
+              is_primary: true,
+              sort_order: 0,
+            },
+          });
+        }
       }
-    } else {
-      // Create a default variant if none provided
-      const defaultSku = generateSku(product_name, 'Tiêu chuẩn');
-      const [defRes] = await connection.query(
-        `INSERT INTO product_variants 
-          (product_id, sku, variant_name, price, stock, warranty_months)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [productId, defaultSku, 'Tiêu chuẩn', 0, 0, 12]
-      );
-      if (thumbnail_url) {
-        await connection.query(
-          `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
-           VALUES (?, ?, 1, 0)`,
-          [defRes.insertId, thumbnail_url]
-        );
-      }
-    }
 
-    // Insert product images
-    if (Array.isArray(images) && images.length > 0) {
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        const imgUrl = typeof img === 'string' ? img : img.image_url;
-        const isPrimary = (typeof img === 'object' && img.is_primary) ? 1 : (i === 0 ? 1 : 0);
-        const altText = (typeof img === 'object' && img.alt_text) ? img.alt_text : product_name;
-        await connection.query(
-          `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, sort_order)
-           VALUES (?, ?, ?, ?, ?)`,
-          [productId, imgUrl, altText, isPrimary, i]
-        );
+      // Insert product images
+      if (Array.isArray(images) && images.length > 0) {
+        const prodImgs = [];
+        for (let i = 0; i < images.length; i++) {
+          const img = images[i];
+          const imgUrl = typeof img === 'string' ? img : img?.image_url;
+          if (!imgUrl) continue;
+          const isPrimary = typeof img === 'object' && img?.is_primary ? true : i === 0;
+          const altText = typeof img === 'object' && img?.alt_text ? img.alt_text : product_name;
+          prodImgs.push({
+            product_id: prod.product_id,
+            image_url: imgUrl,
+            alt_text: altText,
+            is_primary: isPrimary,
+            sort_order: i,
+          });
+        }
+        if (prodImgs.length > 0) {
+          await tx.productImage.createMany({ data: prodImgs });
+        }
       }
-    }
 
-    await connection.commit();
+      return prod;
+    });
 
     return successResponse(
       res,
       {
-        product_id: productId,
-        product_name,
-        slug: finalSlug
+        product_id: createdProduct.product_id,
+        product_name: createdProduct.product_name,
+        slug: createdProduct.slug,
       },
       'Thêm sản phẩm mới thành công',
       201
     );
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
 // [PUT] /api/products/:id (Admin only)
 async function updateProduct(req, res, next) {
   try {
-    const { id } = req.params;
+    const productId = BigInt(req.params.id);
     const {
       product_name,
       slug,
@@ -381,37 +429,31 @@ async function updateProduct(req, res, next) {
       brand_id,
       description,
       thumbnail_url,
-      status
+      status,
     } = req.body;
 
-    const [existing] = await pool.query('SELECT * FROM products WHERE product_id = ?', [id]);
-    if (existing.length === 0) {
+    const existing = await prisma.product.findUnique({
+      where: { product_id: productId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Sản phẩm không tồn tại', 404);
     }
 
-    const newSlug = slug ? slugify(slug) : (product_name ? slugify(product_name) : existing[0].slug);
+    const newSlug = slug ? slugify(slug) : product_name ? slugify(product_name) : existing.slug;
 
-    await pool.query(
-      `UPDATE products SET 
-        product_name = COALESCE(?, product_name),
-        slug = ?,
-        category_id = COALESCE(?, category_id),
-        brand_id = ?,
-        description = COALESCE(?, description),
-        thumbnail_url = COALESCE(?, thumbnail_url),
-        status = COALESCE(?, status)
-       WHERE product_id = ?`,
-      [
-        product_name,
-        newSlug,
-        category_id,
-        brand_id !== undefined ? brand_id : existing[0].brand_id,
-        description,
-        thumbnail_url,
-        status,
-        id
-      ]
-    );
+    const updateData = {};
+    if (product_name !== undefined) updateData.product_name = product_name.trim();
+    if (newSlug) updateData.slug = newSlug;
+    if (category_id !== undefined) updateData.category_id = BigInt(category_id);
+    if (brand_id !== undefined) updateData.brand_id = brand_id ? BigInt(brand_id) : null;
+    if (description !== undefined) updateData.description = description;
+    if (thumbnail_url !== undefined) updateData.thumbnail_url = thumbnail_url;
+    if (status !== undefined) updateData.status = status;
+
+    await prisma.product.update({
+      where: { product_id: productId },
+      data: updateData,
+    });
 
     return successResponse(res, null, 'Cập nhật sản phẩm thành công');
   } catch (error) {
@@ -422,46 +464,33 @@ async function updateProduct(req, res, next) {
 // [DELETE] /api/products/:id (Admin only)
 async function deleteProduct(req, res, next) {
   try {
-    const { id } = req.params;
+    const productId = BigInt(req.params.id);
     const { hardDelete } = req.query;
 
+    const existing = await prisma.product.findUnique({
+      where: { product_id: productId },
+    });
+    if (!existing) {
+      return errorResponse(res, 'Sản phẩm không tồn tại', 404);
+    }
+
     if (hardDelete === 'true') {
-      const [result] = await pool.query('DELETE FROM products WHERE product_id = ?', [id]);
-      if (result.affectedRows === 0) {
-        return errorResponse(res, 'Sản phẩm không tồn tại', 404);
-      }
+      await prisma.product.delete({
+        where: { product_id: productId },
+      });
       return successResponse(res, null, 'Đã xóa vĩnh viễn sản phẩm');
     }
 
     // Soft delete / archive
-    await pool.query("UPDATE products SET status = 'archived' WHERE product_id = ?", [id]);
+    await prisma.product.update({
+      where: { product_id: productId },
+      data: { status: 'archived' },
+    });
     return successResponse(res, null, 'Đã chuyển sản phẩm vào kho lưu trữ (archived)');
   } catch (error) {
     next(error);
   }
 }
-
-// Helper to safely format specifications for MySQL JSON column
-function normalizeSpecifications(specifications) {
-  if (specifications === undefined || specifications === null || specifications === '') {
-    return null;
-  }
-  if (typeof specifications === 'object') {
-    return JSON.stringify(specifications);
-  }
-  if (typeof specifications === 'string') {
-    try {
-      JSON.parse(specifications);
-      return specifications;
-    } catch (e) {
-      return JSON.stringify({ 'Thông số': specifications });
-    }
-  }
-  return null;
-}
-// Product Variant logic is separated into variantController.js
-const variantController = require('./variantController');
-
 
 // ============================================
 // PRODUCT IMAGES MANAGEMENT
@@ -470,14 +499,15 @@ const variantController = require('./variantController');
 // [GET] /api/products/:id/images
 async function getProductImages(req, res, next) {
   try {
-    const { id } = req.params;
-    const [images] = await pool.query(
-      `SELECT image_id, product_id, image_url, alt_text, is_primary, sort_order, created_at
-       FROM product_images
-       WHERE product_id = ?
-       ORDER BY is_primary DESC, sort_order ASC, created_at ASC`,
-      [id]
-    );
+    const productId = BigInt(req.params.id);
+    const images = await prisma.productImage.findMany({
+      where: { product_id: productId },
+      orderBy: [
+        { is_primary: 'desc' },
+        { sort_order: 'asc' },
+        { created_at: 'asc' },
+      ],
+    });
     return successResponse(res, images, 'Danh sách ảnh sản phẩm');
   } catch (error) {
     next(error);
@@ -487,7 +517,7 @@ async function getProductImages(req, res, next) {
 // [POST] /api/products/:id/images (Admin only, file upload or URL)
 async function addProductImage(req, res, next) {
   try {
-    const { id } = req.params;
+    const productId = BigInt(req.params.id);
     let imageUrl = req.body?.image_url;
     if (req.file) {
       imageUrl = `/uploads/${req.file.filename}`;
@@ -499,37 +529,52 @@ async function addProductImage(req, res, next) {
       return errorResponse(res, 'Vui lòng cung cấp tệp ảnh hoặc URL ảnh', 400);
     }
 
-    const [productRows] = await pool.query('SELECT product_name, thumbnail_url FROM products WHERE product_id = ?', [id]);
-    if (productRows.length === 0) {
+    const product = await prisma.product.findUnique({
+      where: { product_id: productId },
+    });
+    if (!product) {
       return errorResponse(res, 'Sản phẩm không tồn tại', 404);
     }
 
-    const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM product_images WHERE product_id = ?', [id]);
-    const isFirst = countRows[0].total === 0;
-    const requestedPrimary = req.body?.is_primary === 'true' || req.body?.is_primary === true || req.body?.is_primary === 1 || isFirst;
+    const count = await prisma.productImage.count({
+      where: { product_id: productId },
+    });
+    const isFirst = count === 0;
+    const requestedPrimary =
+      req.body?.is_primary === 'true' || req.body?.is_primary === true || req.body?.is_primary === 1 || isFirst;
 
     if (requestedPrimary) {
-      await pool.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [id]);
-      await pool.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [imageUrl, id]);
+      await prisma.productImage.updateMany({
+        where: { product_id: productId },
+        data: { is_primary: false },
+      });
+      await prisma.product.update({
+        where: { product_id: productId },
+        data: { thumbnail_url: imageUrl },
+      });
     }
 
-    const altText = req.body?.alt_text || productRows[0].product_name;
+    const altText = req.body?.alt_text || product.product_name;
 
-    const [insertResult] = await pool.query(
-      `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, sort_order)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, imageUrl, altText, requestedPrimary ? 1 : 0, countRows[0].total]
-    );
+    const newImg = await prisma.productImage.create({
+      data: {
+        product_id: productId,
+        image_url: imageUrl,
+        alt_text: altText,
+        is_primary: !!requestedPrimary,
+        sort_order: count,
+      },
+    });
 
     return successResponse(
       res,
       {
-        image_id: insertResult.insertId,
-        product_id: parseInt(id, 10),
+        image_id: newImg.image_id,
+        product_id: newImg.product_id,
         image_url: imageUrl,
         alt_text: altText,
-        is_primary: requestedPrimary ? 1 : 0,
-        sort_order: countRows[0].total,
+        is_primary: newImg.is_primary ? 1 : 0,
+        sort_order: count,
       },
       'Thêm ảnh sản phẩm thành công',
       201
@@ -542,25 +587,36 @@ async function addProductImage(req, res, next) {
 // [DELETE] /api/products/images/:imageId (Admin only)
 async function deleteProductImage(req, res, next) {
   try {
-    const { imageId } = req.params;
-    const [existing] = await pool.query('SELECT * FROM product_images WHERE image_id = ?', [imageId]);
-    if (existing.length === 0) {
+    const imageId = BigInt(req.params.imageId);
+
+    const existing = await prisma.productImage.findUnique({
+      where: { image_id: imageId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Ảnh sản phẩm không tồn tại', 404);
     }
 
-    const productId = existing[0].product_id;
-    const wasPrimary = existing[0].is_primary === 1;
+    const productId = existing.product_id;
+    const wasPrimary = existing.is_primary;
 
-    await pool.query('DELETE FROM product_images WHERE image_id = ?', [imageId]);
+    await prisma.productImage.delete({
+      where: { image_id: imageId },
+    });
 
     if (wasPrimary) {
-      const [remaining] = await pool.query(
-        'SELECT image_id, image_url FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, image_id ASC LIMIT 1',
-        [productId]
-      );
-      if (remaining.length > 0) {
-        await pool.query('UPDATE product_images SET is_primary = 1 WHERE image_id = ?', [remaining[0].image_id]);
-        await pool.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [remaining[0].image_url, productId]);
+      const remaining = await prisma.productImage.findFirst({
+        where: { product_id: productId },
+        orderBy: [{ sort_order: 'asc' }, { image_id: 'asc' }],
+      });
+      if (remaining) {
+        await prisma.productImage.update({
+          where: { image_id: remaining.image_id },
+          data: { is_primary: true },
+        });
+        await prisma.product.update({
+          where: { product_id: productId },
+          data: { thumbnail_url: remaining.image_url },
+        });
       }
     }
 
@@ -572,34 +628,37 @@ async function deleteProductImage(req, res, next) {
 
 // [PUT] /api/products/images/:imageId/primary (Admin only)
 async function setPrimaryProductImage(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-    const { imageId } = req.params;
+    const imageId = BigInt(req.params.imageId);
 
-    const [existing] = await connection.query('SELECT * FROM product_images WHERE image_id = ?', [imageId]);
-    if (existing.length === 0) {
-      await connection.rollback();
+    const existing = await prisma.productImage.findUnique({
+      where: { image_id: imageId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Ảnh không tồn tại', 404);
     }
 
-    const productId = existing[0].product_id;
-    const imageUrl = existing[0].image_url;
+    const productId = existing.product_id;
+    const imageUrl = existing.image_url;
 
-    // Reset all product images to non-primary
-    await connection.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [productId]);
-    // Set this image as primary
-    await connection.query('UPDATE product_images SET is_primary = 1 WHERE image_id = ?', [imageId]);
-    // Update thumbnail_url in products
-    await connection.query('UPDATE products SET thumbnail_url = ? WHERE product_id = ?', [imageUrl, productId]);
+    await prisma.$transaction([
+      prisma.productImage.updateMany({
+        where: { product_id: productId },
+        data: { is_primary: false },
+      }),
+      prisma.productImage.update({
+        where: { image_id: imageId },
+        data: { is_primary: true },
+      }),
+      prisma.product.update({
+        where: { product_id: productId },
+        data: { thumbnail_url: imageUrl },
+      }),
+    ]);
 
-    await connection.commit();
     return successResponse(res, null, 'Đã đặt làm ảnh chính sản phẩm');
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 

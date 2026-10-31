@@ -1,5 +1,6 @@
 const mysql = require('mysql2/promise');
 const dotenv = require('dotenv');
+const prisma = require('./prisma');
 
 dotenv.config();
 
@@ -36,5 +37,6 @@ async function testConnection() {
 
 module.exports = {
   pool,
+  prisma,
   testConnection
 };

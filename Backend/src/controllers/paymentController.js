@@ -2,7 +2,7 @@ require('dotenv').config();
 const moment = require('moment');
 const crypto = require('crypto');
 const querystring = require('qs');
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { executeOrderCreation } = require('./orderController');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
@@ -20,7 +20,7 @@ const createPayment = async (req, res, next) => {
   try {
     process.env.TZ = 'Asia/Ho_Chi_Minh';
 
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const {
       amount,
       address_id,
@@ -30,7 +30,7 @@ const createPayment = async (req, res, next) => {
       coupon_code,
       items,
       notes,
-      language
+      language,
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -43,7 +43,6 @@ const createPayment = async (req, res, next) => {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const txnRef = req.body.order_id || `${moment(date).format('YYMMDDHHmmss')}${randomSuffix}`;
 
-    // Lưu phiên giao dịch chờ thanh toán vào bảng vnpay_transactions
     const orderData = {
       address_id,
       recipient_name,
@@ -51,15 +50,24 @@ const createPayment = async (req, res, next) => {
       street_address,
       coupon_code,
       items,
-      notes
+      notes,
     };
 
-    await pool.query(
-      `INSERT INTO vnpay_transactions (txn_ref, user_id, amount, order_data, status)
-       VALUES (?, ?, ?, ?, 'pending')
-       ON DUPLICATE KEY UPDATE amount = VALUES(amount), order_data = VALUES(order_data), status = 'pending'`,
-      [txnRef, userId, numericAmount, JSON.stringify(orderData)]
-    );
+    await prisma.vNPayTransaction.upsert({
+      where: { txn_ref: txnRef },
+      create: {
+        txn_ref: txnRef,
+        user_id: userId,
+        amount: numericAmount,
+        order_data: JSON.stringify(orderData),
+        status: 'pending',
+      },
+      update: {
+        amount: numericAmount,
+        order_data: JSON.stringify(orderData),
+        status: 'pending',
+      },
+    });
 
     let ipAddr =
       req.headers['x-forwarded-for'] ||
@@ -115,7 +123,7 @@ const createPayment = async (req, res, next) => {
       success: true,
       message: 'Tạo URL thanh toán thành công',
       payment_url: vnpUrl,
-      txn_ref: txnRef
+      txn_ref: txnRef,
     });
   } catch (err) {
     next(err);
@@ -155,7 +163,6 @@ const vnpayReturn = async (req, res, next) => {
       return `${frontendBase}?${searchParams.toString()}`;
     };
 
-    // Kiểm tra tính hợp lệ của chữ ký
     if (!isSignatureValid) {
       console.error('[VNPay Return] Chữ ký không hợp lệ!', { secureHash, signed });
       if (req.headers.accept?.includes('application/json')) {
@@ -163,55 +170,49 @@ const vnpayReturn = async (req, res, next) => {
           status: 400,
           success: false,
           code: '97',
-          message: 'Chữ ký không hợp lệ'
+          message: 'Chữ ký không hợp lệ',
         });
       }
       return res.redirect(
         buildRedirectUrl({
           vnp_ResponseCode: '97',
           vnp_TxnRef: txnRef || '',
-          message: 'Chữ ký không hợp lệ (Mã lỗi 97)'
+          message: 'Chữ ký không hợp lệ (Mã lỗi 97)',
         })
       );
     }
 
-    // Chữ ký hợp lệ -> Tìm bản ghi phiên giao dịch
-    const [txRows] = await pool.query(
-      'SELECT * FROM vnpay_transactions WHERE txn_ref = ? LIMIT 1',
-      [txnRef]
-    );
+    const tx = await prisma.vNPayTransaction.findUnique({
+      where: { txn_ref: txnRef },
+      include: {
+        order: { select: { order_code: true, total_amount: true } },
+      },
+    });
 
-    if (txRows.length === 0) {
+    if (!tx) {
       console.error('[VNPay Return] Không tìm thấy transaction:', txnRef);
       if (req.headers.accept?.includes('application/json')) {
         return res.status(404).json({
           status: 404,
           success: false,
           code: responseCode,
-          message: 'Không tìm thấy thông tin phiên giao dịch'
+          message: 'Không tìm thấy thông tin phiên giao dịch',
         });
       }
       return res.redirect(
         buildRedirectUrl({
           vnp_ResponseCode: responseCode,
           vnp_TxnRef: txnRef || '',
-          message: 'Không tìm thấy thông tin giao dịch'
+          message: 'Không tìm thấy thông tin giao dịch',
         })
       );
     }
 
-    const tx = txRows[0];
-
     // Thanh toán thành công (Mã '00')
     if (responseCode === '00') {
-      // Trường hợp người dùng reload trang callback hoặc VNPay gửi nhiều lần:
       if (tx.status === 'success' && tx.order_id) {
-        const [existingOrders] = await pool.query(
-          'SELECT order_code, total_amount FROM orders WHERE order_id = ?',
-          [tx.order_id]
-        );
-        const orderCode = existingOrders[0]?.order_code || tx.order_id;
-        const totalAmount = existingOrders[0]?.total_amount || tx.amount;
+        const orderCode = tx.order?.order_code || tx.order_id;
+        const totalAmount = tx.order?.total_amount ? Number(tx.order.total_amount) : Number(tx.amount);
 
         if (req.headers.accept?.includes('application/json')) {
           return res.status(200).json({
@@ -221,7 +222,7 @@ const vnpayReturn = async (req, res, next) => {
             order_id: tx.order_id,
             order_code: orderCode,
             amount: totalAmount,
-            message: 'Đơn hàng đã được thanh toán và ghi nhận trước đó'
+            message: 'Đơn hàng đã được thanh toán và ghi nhận trước đó',
           });
         }
         return res.redirect(
@@ -232,16 +233,13 @@ const vnpayReturn = async (req, res, next) => {
             order_code: orderCode,
             amount: totalAmount,
             bank_code: bankCode,
-            pay_date: payDate
+            pay_date: payDate,
           })
         );
       }
 
       // Thanh toán thành công: BÂY GIỜ MỚI TẠO ORDER CHÍNH THỨC
-      const connection = await pool.getConnection();
       try {
-        await connection.beginTransaction();
-
         let orderData = {};
         try {
           orderData = JSON.parse(tx.order_data || '{}');
@@ -249,32 +247,33 @@ const vnpayReturn = async (req, res, next) => {
           orderData = {};
         }
 
-        const createdOrder = await executeOrderCreation(connection, {
-          userId: tx.user_id,
-          address_id: orderData.address_id,
-          recipient_name: orderData.recipient_name,
-          recipient_phone: orderData.recipient_phone,
-          street_address: orderData.street_address,
-          payment_method: 'VNPay',
-          coupon_code: orderData.coupon_code,
-          items: orderData.items,
-          payment_status: 'paid',
-          paid_at: new Date(),
-          order_status: 'confirmed'
+        const createdOrder = await prisma.$transaction(async (prismaTx) => {
+          const ord = await executeOrderCreation(prismaTx, {
+            userId: tx.user_id,
+            address_id: orderData.address_id,
+            recipient_name: orderData.recipient_name,
+            recipient_phone: orderData.recipient_phone,
+            street_address: orderData.street_address,
+            payment_method: 'VNPay',
+            coupon_code: orderData.coupon_code,
+            items: orderData.items,
+            payment_status: 'paid',
+            paid_at: new Date(),
+            order_status: 'confirmed',
+          });
+
+          await prismaTx.vNPayTransaction.update({
+            where: { txn_ref: txnRef },
+            data: {
+              status: 'success',
+              order_id: ord.order_id,
+              vnp_response_code: responseCode,
+              vnp_transaction_no: transactionNo,
+            },
+          });
+
+          return ord;
         });
-
-        // Cập nhật trạng thái transaction thành công
-        await connection.query(
-          `UPDATE vnpay_transactions 
-           SET status = 'success', 
-               order_id = ?, 
-               vnp_response_code = ?, 
-               vnp_transaction_no = ? 
-           WHERE txn_ref = ?`,
-          [createdOrder.order_id, responseCode, transactionNo, txnRef]
-        );
-
-        await connection.commit();
 
         if (req.headers.accept?.includes('application/json')) {
           return res.status(200).json({
@@ -284,7 +283,7 @@ const vnpayReturn = async (req, res, next) => {
             order_id: createdOrder.order_id,
             order_code: createdOrder.order_code,
             amount: createdOrder.total_amount,
-            message: 'Thanh toán VNPay thành công và đã tạo đơn hàng'
+            message: 'Thanh toán VNPay thành công và đã tạo đơn hàng',
           });
         }
 
@@ -296,28 +295,27 @@ const vnpayReturn = async (req, res, next) => {
             order_code: createdOrder.order_code,
             amount: createdOrder.total_amount,
             bank_code: bankCode,
-            pay_date: payDate
+            pay_date: payDate,
           })
         );
       } catch (createErr) {
-        await connection.rollback();
         console.error('[VNPay Return] Lỗi tạo đơn hàng khi callback:', createErr);
 
-        await pool.query(
-          `UPDATE vnpay_transactions 
-           SET status = 'error_creating_order', 
-               vnp_response_code = ?, 
-               vnp_transaction_no = ? 
-           WHERE txn_ref = ?`,
-          [responseCode, transactionNo, txnRef]
-        );
+        await prisma.vNPayTransaction.update({
+          where: { txn_ref: txnRef },
+          data: {
+            status: 'error_creating_order',
+            vnp_response_code: responseCode,
+            vnp_transaction_no: transactionNo,
+          },
+        });
 
         if (req.headers.accept?.includes('application/json')) {
           return res.status(500).json({
             status: 500,
             success: false,
             code: responseCode,
-            message: 'Thanh toán thành công nhưng xảy ra lỗi khi tạo đơn hàng: ' + createErr.message
+            message: 'Thanh toán thành công nhưng xảy ra lỗi khi tạo đơn hàng: ' + createErr.message,
           });
         }
 
@@ -326,22 +324,20 @@ const vnpayReturn = async (req, res, next) => {
             vnp_ResponseCode: '99',
             vnp_TxnRef: txnRef,
             error: createErr.message,
-            message: 'Lỗi trong quá trình tạo đơn hàng'
+            message: 'Lỗi trong quá trình tạo đơn hàng',
           })
         );
-      } finally {
-        connection.release();
       }
     } else {
-      // Thanh toán không thành công hoặc người dùng hủy -> KHÔNG TẠO ORDER!
-      await pool.query(
-        `UPDATE vnpay_transactions 
-         SET status = 'failed', 
-             vnp_response_code = ?, 
-             vnp_transaction_no = ? 
-         WHERE txn_ref = ?`,
-        [responseCode, transactionNo, txnRef]
-      );
+      // Thanh toán không thành công hoặc người dùng hủy
+      await prisma.vNPayTransaction.update({
+        where: { txn_ref: txnRef },
+        data: {
+          status: 'failed',
+          vnp_response_code: responseCode,
+          vnp_transaction_no: transactionNo,
+        },
+      });
 
       if (req.headers.accept?.includes('application/json')) {
         return res.status(200).json({
@@ -349,7 +345,7 @@ const vnpayReturn = async (req, res, next) => {
           success: false,
           code: responseCode,
           txn_ref: txnRef,
-          message: 'Giao dịch thanh toán không thành công hoặc đã bị hủy'
+          message: 'Giao dịch thanh toán không thành công hoặc đã bị hủy',
         });
       }
 
@@ -358,7 +354,7 @@ const vnpayReturn = async (req, res, next) => {
           vnp_ResponseCode: responseCode,
           vnp_TxnRef: txnRef,
           amount: rawAmount,
-          message: 'Giao dịch không thành công hoặc người dùng đã hủy'
+          message: 'Giao dịch không thành công hoặc người dùng đã hủy',
         })
       );
     }
@@ -371,19 +367,42 @@ const vnpayReturn = async (req, res, next) => {
 const checkTransactionStatus = async (req, res, next) => {
   try {
     const { txnRef } = req.params;
-    const [txRows] = await pool.query(
-      `SELECT vt.*, o.order_code, o.order_status, o.payment_status, o.total_amount 
-       FROM vnpay_transactions vt
-       LEFT JOIN orders o ON vt.order_id = o.order_id
-       WHERE vt.txn_ref = ?`,
-      [txnRef]
-    );
+    const tx = await prisma.vNPayTransaction.findUnique({
+      where: { txn_ref: txnRef },
+      include: {
+        order: {
+          select: {
+            order_code: true,
+            order_status: true,
+            payment_status: true,
+            total_amount: true,
+          },
+        },
+      },
+    });
 
-    if (txRows.length === 0) {
+    if (!tx) {
       return errorResponse(res, 'Không tìm thấy thông tin giao dịch', 404);
     }
 
-    return successResponse(res, txRows[0], 'Thông tin giao dịch VNPay');
+    const formatted = {
+      txn_ref: tx.txn_ref,
+      user_id: tx.user_id,
+      amount: tx.amount,
+      order_data: tx.order_data,
+      status: tx.status,
+      vnp_response_code: tx.vnp_response_code,
+      vnp_transaction_no: tx.vnp_transaction_no,
+      order_id: tx.order_id,
+      created_at: tx.created_at,
+      updated_at: tx.updated_at,
+      order_code: tx.order?.order_code || null,
+      order_status: tx.order?.order_status || null,
+      payment_status: tx.order?.payment_status || null,
+      total_amount: tx.order?.total_amount || null,
+    };
+
+    return successResponse(res, formatted, 'Thông tin giao dịch VNPay');
   } catch (err) {
     next(err);
   }
@@ -393,5 +412,5 @@ module.exports = {
   createPayment,
   vnpayReturn,
   checkTransactionStatus,
-  sortObject
+  sortObject,
 };

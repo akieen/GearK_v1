@@ -1,8 +1,8 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { generateOrderCode, successResponse, errorResponse } = require('../utils/helpers');
 
 // Core order creation logic reusable by createOrder and VNPay payment callback
-async function executeOrderCreation(connection, {
+async function executeOrderCreation(tx, {
   userId,
   address_id,
   recipient_name,
@@ -13,62 +13,61 @@ async function executeOrderCreation(connection, {
   items: customItems,
   payment_status = 'unpaid',
   paid_at = null,
-  order_status = null
+  order_status = null,
 }) {
+  const parsedUserId = BigInt(userId);
+
   // 1. Resolve Address
-  let finalAddressId = address_id;
+  let finalAddressId = address_id ? BigInt(address_id) : null;
   if (!finalAddressId) {
     if (!recipient_name || !recipient_phone || !street_address) {
       const err = new Error('Vui lòng cung cấp địa chỉ nhận hàng (address_id hoặc thông tin người nhận)');
       err.status = 400;
       throw err;
     }
-    const [addrResult] = await connection.query(
-      'INSERT INTO addresses (user_id, recipient_name, recipient_phone, street_address) VALUES (?, ?, ?, ?)',
-      [userId, recipient_name, recipient_phone, street_address]
-    );
-    finalAddressId = addrResult.insertId;
+    const newAddr = await tx.address.create({
+      data: {
+        user_id: parsedUserId,
+        recipient_name: recipient_name.trim(),
+        recipient_phone: recipient_phone.trim(),
+        street_address: street_address.trim(),
+      },
+    });
+    finalAddressId = newAddr.address_id;
   }
 
   // 2. Resolve Items
   let orderItemsData = [];
-
   if (Array.isArray(customItems) && customItems.length > 0) {
     orderItemsData = customItems;
   } else {
     // Get from the user's latest cart
-    const [userCarts] = await connection.query(
-      'SELECT cart_id FROM carts WHERE user_id = ? ORDER BY cart_id DESC LIMIT 1',
-      [userId]
-    );
-    if (userCarts.length === 0) {
-      const err = new Error('Giỏ hàng của bạn đang trống, không thể tạo đơn hàng');
-      err.status = 400;
-      throw err;
-    }
-    const cartId = userCarts[0].cart_id;
+    const userCart = await tx.cart.findFirst({
+      where: { user_id: parsedUserId },
+      orderBy: { cart_id: 'desc' },
+      include: {
+        items: {
+          select: { variant_id: true, quantity: true },
+        },
+      },
+    });
 
-    const [cartRows] = await connection.query(
-      `SELECT ci.variant_id, ci.quantity 
-       FROM cart_items ci
-       WHERE ci.cart_id = ?`,
-      [cartId]
-    );
-    if (cartRows.length === 0) {
+    if (!userCart || userCart.items.length === 0) {
       const err = new Error('Giỏ hàng của bạn đang trống, không thể tạo đơn hàng');
       err.status = 400;
       throw err;
     }
-    orderItemsData = cartRows;
+    orderItemsData = userCart.items;
   }
 
   // Consolidate order items if any duplicate variants exist
   const itemMap = new Map();
   for (const item of orderItemsData) {
-    const vId = Number(item.variant_id);
+    const vId = item.variant_id ? BigInt(item.variant_id) : null;
     const qty = Number(item.quantity) || 1;
     if (!vId || qty <= 0) continue;
-    itemMap.set(vId, (itemMap.get(vId) || 0) + qty);
+    const vIdKey = vId.toString();
+    itemMap.set(vIdKey, { variant_id: vId, quantity: (itemMap.get(vIdKey)?.quantity || 0) + qty });
   }
 
   if (itemMap.size === 0) {
@@ -81,26 +80,23 @@ async function executeOrderCreation(connection, {
   let subtotal = 0;
   const itemsToInsert = [];
 
-  for (const [variantId, quantity] of itemMap.entries()) {
-    const [variantRows] = await connection.query(
-      `SELECT v.variant_id, v.variant_name, v.price, v.sale_price, v.stock, p.product_name
-       FROM product_variants v
-       JOIN products p ON v.product_id = p.product_id
-       WHERE v.variant_id = ? FOR UPDATE`,
-      [variantId]
-    );
+  for (const { variant_id, quantity } of itemMap.values()) {
+    const variant = await tx.productVariant.findUnique({
+      where: { variant_id },
+      include: {
+        product: { select: { product_name: true } },
+      },
+    });
 
-    if (variantRows.length === 0) {
-      const err = new Error(`Sản phẩm với mã phiên bản ${variantId} không tồn tại`);
+    if (!variant) {
+      const err = new Error(`Sản phẩm với mã phiên bản ${variant_id} không tồn tại`);
       err.status = 404;
       throw err;
     }
 
-    const variant = variantRows[0];
-
     if (variant.stock < quantity) {
       const err = new Error(
-        `Sản phẩm "${variant.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho (bạn đặt ${quantity})`
+        `Sản phẩm "${variant.product.product_name} - ${variant.variant_name}" chỉ còn ${variant.stock} sản phẩm trong kho (bạn đặt ${quantity})`
       );
       err.status = 400;
       throw err;
@@ -112,12 +108,12 @@ async function executeOrderCreation(connection, {
 
     itemsToInsert.push({
       variant_id: variant.variant_id,
-      product_name: variant.product_name,
+      product_name: variant.product.product_name,
       variant_name: variant.variant_name,
       unit_price: unitPrice,
       quantity,
       line_total: lineTotal,
-      current_stock: variant.stock
+      current_stock: variant.stock,
     });
   }
 
@@ -126,16 +122,16 @@ async function executeOrderCreation(connection, {
   let appliedCouponId = null;
 
   if (coupon_code) {
-    const [coupons] = await connection.query(
-      'SELECT * FROM coupons WHERE coupon_code = ? LIMIT 1',
-      [coupon_code]
-    );
-    if (coupons.length > 0) {
-      const cp = coupons[0];
-      const now = new Date();
+    const cp = await tx.coupon.findUnique({
+      where: { coupon_code: coupon_code.trim().toUpperCase() },
+    });
 
+    if (cp) {
+      const now = new Date();
       if (cp.start_date && new Date(cp.start_date) > now) {
-        const err = new Error(`Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(cp.start_date).toLocaleDateString('vi-VN')})`);
+        const err = new Error(
+          `Mã giảm giá chưa đến ngày có hiệu lực (bắt đầu từ ${new Date(cp.start_date).toLocaleDateString('vi-VN')})`
+        );
         err.status = 400;
         throw err;
       }
@@ -144,12 +140,12 @@ async function executeOrderCreation(connection, {
         err.status = 400;
         throw err;
       }
-
       if (cp.usage_limit !== null && cp.used_count >= cp.usage_limit) {
         const err = new Error('Mã giảm giá đã hết lượt sử dụng');
         err.status = 400;
         throw err;
       }
+
       appliedCouponId = cp.coupon_id;
       if (cp.discount_type === 'percent') {
         discountAmount = (subtotal * Number(cp.discount_value)) / 100;
@@ -165,66 +161,99 @@ async function executeOrderCreation(connection, {
   const finalOrderStatus = order_status || (payment_status === 'paid' ? 'confirmed' : 'pending');
 
   // 5. Insert into orders
-  const [orderResult] = await connection.query(
-    `INSERT INTO orders (user_id, address_id, order_code, total_amount, order_status, payment_status)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [userId, finalAddressId, orderCode, totalAmount, finalOrderStatus, payment_status]
-  );
-  const orderId = orderResult.insertId;
+  const newOrder = await tx.order.create({
+    data: {
+      user_id: parsedUserId,
+      address_id: finalAddressId,
+      order_code: orderCode,
+      total_amount: totalAmount,
+      order_status: finalOrderStatus,
+      payment_status,
+    },
+  });
+
+  const orderId = newOrder.order_id;
 
   // 6. Insert order items & update inventory
   for (const it of itemsToInsert) {
-    await connection.query(
-      `INSERT INTO order_items (order_id, variant_id, product_name, variant_name, unit_price, quantity, line_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [orderId, it.variant_id, it.product_name, it.variant_name, it.unit_price, it.quantity, it.line_total]
-    );
+    await tx.orderItem.create({
+      data: {
+        order_id: orderId,
+        variant_id: it.variant_id,
+        product_name: it.product_name,
+        variant_name: it.variant_name,
+        unit_price: it.unit_price,
+        quantity: it.quantity,
+        line_total: it.line_total,
+      },
+    });
 
     // Deduct stock
     const newStock = it.current_stock - it.quantity;
-    await connection.query('UPDATE product_variants SET stock = ? WHERE variant_id = ?', [newStock, it.variant_id]);
+    await tx.productVariant.update({
+      where: { variant_id: it.variant_id },
+      data: { stock: newStock },
+    });
 
     // Record inventory transaction
-    await connection.query(
-      `INSERT INTO inventory_transactions (variant_id, created_by, transaction_type, quantity_delta, stock_after)
-       VALUES (?, ?, 'sale', ?, ?)`,
-      [it.variant_id, userId, -it.quantity, newStock]
-    );
+    await tx.inventoryTransaction.create({
+      data: {
+        variant_id: it.variant_id,
+        created_by: parsedUserId,
+        transaction_type: 'sale',
+        quantity_delta: -it.quantity,
+        stock_after: newStock,
+      },
+    });
   }
 
   // 7. Insert coupon if applied
   if (appliedCouponId && discountAmount > 0) {
-    await connection.query(
-      'INSERT INTO order_coupons (order_id, coupon_id, discount_amount) VALUES (?, ?, ?)',
-      [orderId, appliedCouponId, discountAmount]
-    );
-    await connection.query(
-      'UPDATE coupons SET used_count = used_count + 1 WHERE coupon_id = ?',
-      [appliedCouponId]
-    );
+    await tx.orderCoupon.create({
+      data: {
+        order_id: orderId,
+        coupon_id: appliedCouponId,
+        discount_amount: discountAmount,
+      },
+    });
+
+    await tx.coupon.update({
+      where: { coupon_id: appliedCouponId },
+      data: { used_count: { increment: 1 } },
+    });
   }
 
   // 8. Insert status history
-  await connection.query(
-    'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, NULL, ?)',
-    [orderId, userId, finalOrderStatus]
-  );
+  await tx.orderStatusHistory.create({
+    data: {
+      order_id: orderId,
+      changed_by: parsedUserId,
+      old_status: null,
+      new_status: finalOrderStatus,
+    },
+  });
 
   // 9. Insert payment record
   const paymentRecordStatus = payment_status === 'paid' ? 'success' : 'pending';
-  await connection.query(
-    `INSERT INTO payments (order_id, payment_method, amount, payment_status, paid_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [orderId, payment_method, totalAmount, paymentRecordStatus, paid_at || (payment_status === 'paid' ? new Date() : null)]
-  );
+  await tx.payment.create({
+    data: {
+      order_id: orderId,
+      payment_method,
+      amount: totalAmount,
+      payment_status: paymentRecordStatus,
+      paid_at: paid_at || (payment_status === 'paid' ? new Date() : null),
+    },
+  });
 
   // 10. Clear cart for the user after checkout
-  await connection.query(
-    `DELETE ci FROM cart_items ci
-     JOIN carts c ON ci.cart_id = c.cart_id
-     WHERE c.user_id = ?`,
-    [userId]
-  );
+  const userCart = await tx.cart.findUnique({
+    where: { user_id: parsedUserId },
+  });
+  if (userCart) {
+    await tx.cartItem.deleteMany({
+      where: { cart_id: userCart.cart_id },
+    });
+  }
 
   return {
     order_id: orderId,
@@ -232,84 +261,101 @@ async function executeOrderCreation(connection, {
     total_amount: totalAmount,
     discount_amount: discountAmount,
     order_status: finalOrderStatus,
-    payment_status: payment_status
+    payment_status,
   };
 }
 
 // [POST] /api/orders
 async function createOrder(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-
-    const orderData = await executeOrderCreation(connection, {
-      userId: req.user.user_id,
-      address_id: req.body.address_id,
-      recipient_name: req.body.recipient_name,
-      recipient_phone: req.body.recipient_phone,
-      street_address: req.body.street_address,
-      payment_method: req.body.payment_method || 'COD',
-      coupon_code: req.body.coupon_code,
-      items: req.body.items,
-      payment_status: 'unpaid'
+    const orderData = await prisma.$transaction(async (tx) => {
+      return executeOrderCreation(tx, {
+        userId: req.user.user_id,
+        address_id: req.body.address_id,
+        recipient_name: req.body.recipient_name,
+        recipient_phone: req.body.recipient_phone,
+        street_address: req.body.street_address,
+        payment_method: req.body.payment_method || 'COD',
+        coupon_code: req.body.coupon_code,
+        items: req.body.items,
+        payment_status: 'unpaid',
+      });
     });
 
-    await connection.commit();
-
-    return successResponse(
-      res,
-      orderData,
-      'Đặt hàng thành công',
-      201
-    );
+    return successResponse(res, orderData, 'Đặt hàng thành công', 201);
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
 // [GET] /api/orders
 async function getUserOrders(req, res, next) {
   try {
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
 
-    const [orders] = await pool.query(
-      `SELECT o.*, 
-              COALESCE(a.recipient_name, u.full_name) AS recipient_name, 
-              a.recipient_phone, 
-              a.street_address,
-              a.street_address AS shipping_address,
-              (SELECT payment_method FROM payments WHERE order_id = o.order_id ORDER BY payment_id DESC LIMIT 1) AS payment_method
-       FROM orders o
-       JOIN users u ON o.user_id = u.user_id
-       LEFT JOIN addresses a ON o.address_id = a.address_id
-       WHERE o.user_id = ?
-       ORDER BY o.created_at DESC`,
-      [userId]
-    );
+    const orders = await prisma.order.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        address: true,
+        user: { select: { full_name: true } },
+        payments: {
+          orderBy: { payment_id: 'desc' },
+          take: 1,
+        },
+        items: {
+          include: {
+            variant: {
+              include: {
+                product: {
+                  select: { thumbnail_url: true, slug: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
-    if (orders.length === 0) {
-      return successResponse(res, [], 'Danh sách đơn hàng của bạn');
-    }
+    const formattedOrders = orders.map((o) => {
+      const payment_method = o.payments[0]?.payment_method || 'COD';
+      const recipient_name = o.address?.recipient_name || o.user?.full_name || 'Khách hàng';
+      const recipient_phone = o.address?.recipient_phone || '';
+      const street_address = o.address?.street_address || '';
 
-    const orderIds = orders.map(o => o.order_id);
-    const [items] = await pool.query(
-      `SELECT oi.*, p.thumbnail_url, p.slug AS product_slug
-       FROM order_items oi
-       LEFT JOIN product_variants v ON oi.variant_id = v.variant_id
-       LEFT JOIN products p ON v.product_id = p.product_id
-       WHERE oi.order_id IN (?)`,
-      [orderIds]
-    );
+      const items = o.items.map((it) => ({
+        order_item_id: it.order_item_id,
+        order_id: it.order_id,
+        variant_id: it.variant_id,
+        product_name: it.product_name,
+        variant_name: it.variant_name,
+        unit_price: it.unit_price,
+        quantity: it.quantity,
+        line_total: it.line_total,
+        thumbnail_url: it.variant?.product?.thumbnail_url || null,
+        product_slug: it.variant?.product?.slug || null,
+      }));
 
-    const ordersWithItems = orders.map(o => ({
-      ...o,
-      items: items.filter(it => it.order_id === o.order_id)
-    }));
+      return {
+        order_id: o.order_id,
+        user_id: o.user_id,
+        address_id: o.address_id,
+        order_code: o.order_code,
+        total_amount: o.total_amount,
+        order_status: o.order_status,
+        payment_status: o.payment_status,
+        created_at: o.created_at,
+        updated_at: o.updated_at,
+        recipient_name,
+        recipient_phone,
+        street_address,
+        shipping_address: street_address,
+        payment_method,
+        items,
+      };
+    });
 
-    return successResponse(res, ordersWithItems, 'Danh sách đơn hàng của bạn');
+    return successResponse(res, formattedOrders, 'Danh sách đơn hàng của bạn');
   } catch (error) {
     next(error);
   }
@@ -319,76 +365,105 @@ async function getUserOrders(req, res, next) {
 async function getOrderDetail(req, res, next) {
   try {
     const { codeOrId } = req.params;
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const isAdmin = req.user.role === 'admin' || req.user.role === 'staff';
 
-    let condition = isNaN(codeOrId) ? 'o.order_code = ?' : 'o.order_id = ?';
-    let params = [codeOrId];
+    const isNumeric = !isNaN(codeOrId);
+    const whereCondition = isNumeric
+      ? { order_id: BigInt(codeOrId) }
+      : { order_code: codeOrId };
 
     if (!isAdmin) {
-      condition += ' AND o.user_id = ?';
-      params.push(userId);
+      whereCondition.user_id = userId;
     }
 
-    const [orders] = await pool.query(
-      `SELECT o.*, u.full_name AS customer_name, u.email AS customer_email,
-              a.recipient_name, a.recipient_phone, a.street_address
-       FROM orders o
-       JOIN users u ON o.user_id = u.user_id
-       LEFT JOIN addresses a ON o.address_id = a.address_id
-       WHERE ${condition}
-       LIMIT 1`,
-      params
-    );
+    const order = await prisma.order.findFirst({
+      where: whereCondition,
+      include: {
+        user: { select: { full_name: true, email: true } },
+        address: true,
+        items: {
+          include: {
+            variant: {
+              include: {
+                product: {
+                  select: { thumbnail_url: true, slug: true },
+                },
+              },
+            },
+          },
+        },
+        payments: { orderBy: { created_at: 'desc' } },
+        status_history: {
+          orderBy: { changed_at: 'asc' },
+          include: {
+            user: { select: { full_name: true } },
+          },
+        },
+        coupons: {
+          include: { coupon: { select: { coupon_code: true } } },
+        },
+      },
+    });
 
-    if (orders.length === 0) {
+    if (!order) {
       return errorResponse(res, 'Không tìm thấy đơn hàng', 404);
     }
 
-    const order = orders[0];
+    const items = order.items.map((it) => ({
+      order_item_id: it.order_item_id,
+      order_id: it.order_id,
+      variant_id: it.variant_id,
+      product_name: it.product_name,
+      variant_name: it.variant_name,
+      unit_price: it.unit_price,
+      quantity: it.quantity,
+      line_total: it.line_total,
+      thumbnail_url: it.variant?.product?.thumbnail_url || null,
+      product_slug: it.variant?.product?.slug || null,
+    }));
 
-    // Order items
-    const [items] = await pool.query(
-      `SELECT oi.*, p.thumbnail_url, p.slug AS product_slug
-       FROM order_items oi
-       LEFT JOIN product_variants v ON oi.variant_id = v.variant_id
-       LEFT JOIN products p ON v.product_id = p.product_id
-       WHERE oi.order_id = ?`,
-      [order.order_id]
-    );
+    const history = order.status_history.map((h) => ({
+      history_id: h.history_id,
+      order_id: h.order_id,
+      changed_by: h.changed_by,
+      old_status: h.old_status,
+      new_status: h.new_status,
+      changed_at: h.changed_at,
+      changed_by_name: h.user?.full_name || null,
+    }));
 
-    // Payments
-    const [payments] = await pool.query(
-      'SELECT * FROM payments WHERE order_id = ? ORDER BY created_at DESC',
-      [order.order_id]
-    );
+    const couponData = order.coupons.length > 0
+      ? {
+          order_id: order.coupons[0].order_id,
+          coupon_id: order.coupons[0].coupon_id,
+          discount_amount: order.coupons[0].discount_amount,
+          coupon_code: order.coupons[0].coupon?.coupon_code || '',
+        }
+      : null;
 
-    // Status history
-    const [history] = await pool.query(
-      `SELECT h.*, u.full_name AS changed_by_name
-       FROM order_status_history h
-       LEFT JOIN users u ON h.changed_by = u.user_id
-       WHERE h.order_id = ?
-       ORDER BY h.changed_at ASC`,
-      [order.order_id]
-    );
-
-    // Coupon discount
-    const [coupons] = await pool.query(
-      `SELECT oc.*, c.coupon_code 
-       FROM order_coupons oc
-       JOIN coupons c ON oc.coupon_id = c.coupon_id
-       WHERE oc.order_id = ?`,
-      [order.order_id]
-    );
-
-    return successResponse(res, {
-      ...order,
+    const result = {
+      order_id: order.order_id,
+      user_id: order.user_id,
+      address_id: order.address_id,
+      order_code: order.order_code,
+      total_amount: order.total_amount,
+      order_status: order.order_status,
+      payment_status: order.payment_status,
+      created_at: order.created_at,
+      updated_at: order.updated_at,
+      customer_name: order.user?.full_name || 'Khách hàng',
+      customer_email: order.user?.email || '',
+      recipient_name: order.address?.recipient_name || order.user?.full_name || '',
+      recipient_phone: order.address?.recipient_phone || '',
+      street_address: order.address?.street_address || '',
       items,
-      payments,
+      payments: order.payments,
       history,
-      coupons: coupons[0] || null
-    }, 'Chi tiết đơn hàng');
+      coupons: couponData,
+    };
+
+    return successResponse(res, result, 'Chi tiết đơn hàng');
   } catch (error) {
     next(error);
   }
@@ -403,65 +478,80 @@ async function getAllOrders(req, res, next) {
     const limitNum = Math.max(1, parseInt(limit, 10));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereConditions = [];
-    const params = [];
+    const whereConditions = {};
 
     const effectiveStatus = order_status || status;
     if (effectiveStatus) {
-      whereConditions.push('o.order_status = ?');
-      params.push(effectiveStatus);
+      whereConditions.order_status = effectiveStatus;
     }
+
     if (payment_status) {
-      whereConditions.push('o.payment_status = ?');
-      params.push(payment_status);
-    }
-    if (search) {
-      whereConditions.push('(o.order_code LIKE ? OR u.full_name LIKE ? OR u.email LIKE ? OR a.recipient_name LIKE ? OR a.recipient_phone LIKE ?)');
-      const kw = `%${search.trim()}%`;
-      params.push(kw, kw, kw, kw, kw);
+      whereConditions.payment_status = payment_status;
     }
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    if (search && search.trim() !== '') {
+      const kw = search.trim();
+      whereConditions.OR = [
+        { order_code: { contains: kw } },
+        { user: { full_name: { contains: kw } } },
+        { user: { email: { contains: kw } } },
+        { address: { recipient_name: { contains: kw } } },
+        { address: { recipient_phone: { contains: kw } } },
+      ];
+    }
 
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) AS total 
-       FROM orders o 
-       JOIN users u ON o.user_id = u.user_id 
-       LEFT JOIN addresses a ON o.address_id = a.address_id
-       ${whereClause}`,
-      params
+    const [total, orders] = await Promise.all([
+      prisma.order.count({ where: whereConditions }),
+      prisma.order.findMany({
+        where: whereConditions,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limitNum,
+        include: {
+          user: { select: { full_name: true, email: true } },
+          address: true,
+          payments: {
+            orderBy: { payment_id: 'desc' },
+            take: 1,
+            select: { payment_method: true },
+          },
+        },
+      }),
+    ]);
+
+    const formattedOrders = orders.map((o) => ({
+      order_id: o.order_id,
+      user_id: o.user_id,
+      address_id: o.address_id,
+      order_code: o.order_code,
+      total_amount: o.total_amount,
+      order_status: o.order_status,
+      payment_status: o.payment_status,
+      created_at: o.created_at,
+      updated_at: o.updated_at,
+      customer_name: o.user?.full_name || 'Khách hàng',
+      customer_email: o.user?.email || '',
+      email: o.user?.email || '',
+      recipient_name: o.address?.recipient_name || o.user?.full_name || 'Khách hàng',
+      recipient_phone: o.address?.recipient_phone || '',
+      shipping_address: o.address?.street_address || '',
+      street_address: o.address?.street_address || '',
+      payment_method: o.payments[0]?.payment_method || 'COD',
+    }));
+
+    return successResponse(
+      res,
+      {
+        items: formattedOrders,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      },
+      'Danh sách tất cả đơn hàng'
     );
-    const total = countResult[0].total;
-
-    const [orders] = await pool.query(
-      `SELECT 
-         o.*, 
-         u.full_name AS customer_name, 
-         u.email AS customer_email,
-         u.email AS email,
-         COALESCE(a.recipient_name, u.full_name) AS recipient_name,
-         a.recipient_phone,
-         a.street_address AS shipping_address,
-         a.street_address,
-         (SELECT payment_method FROM payments WHERE order_id = o.order_id ORDER BY payment_id DESC LIMIT 1) AS payment_method
-       FROM orders o
-       JOIN users u ON o.user_id = u.user_id
-       LEFT JOIN addresses a ON o.address_id = a.address_id
-       ${whereClause}
-       ORDER BY o.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limitNum, offset]
-    );
-
-    return successResponse(res, {
-      items: orders,
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(total / limitNum)
-      }
-    }, 'Danh sách tất cả đơn hàng');
   } catch (error) {
     next(error);
   }
@@ -469,145 +559,141 @@ async function getAllOrders(req, res, next) {
 
 // [PUT] /api/orders/:id/status (Admin / Staff only)
 async function updateOrderStatus(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-
-    const { id } = req.params;
+    const orderId = BigInt(req.params.id);
     const targetOrderStatus = req.body.order_status || req.body.status;
     const targetPaymentStatus = req.body.payment_status;
-    const changedBy = req.user.user_id;
+    const changedBy = BigInt(req.user.user_id);
 
-    const [existing] = await connection.query('SELECT * FROM orders WHERE order_id = ?', [id]);
-    if (existing.length === 0) {
+    const oldOrder = await prisma.order.findUnique({
+      where: { order_id: orderId },
+      include: { items: true },
+    });
+
+    if (!oldOrder) {
       return errorResponse(res, 'Đơn hàng không tồn tại', 404);
     }
 
-    const oldOrder = existing[0];
+    await prisma.$transaction(async (tx) => {
+      if (targetOrderStatus && targetOrderStatus !== oldOrder.order_status) {
+        await tx.order.update({
+          where: { order_id: orderId },
+          data: { order_status: targetOrderStatus },
+        });
 
-    if (targetOrderStatus && targetOrderStatus !== oldOrder.order_status) {
-      await connection.query(
-        'UPDATE orders SET order_status = ? WHERE order_id = ?',
-        [targetOrderStatus, id]
-      );
+        // Record status history
+        await tx.orderStatusHistory.create({
+          data: {
+            order_id: orderId,
+            changed_by: changedBy,
+            old_status: oldOrder.order_status,
+            new_status: targetOrderStatus,
+          },
+        });
 
-      // Record status history
-      await connection.query(
-        'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, ?, ?)',
-        [id, changedBy, oldOrder.order_status, targetOrderStatus]
-      );
-
-      // If cancelled, restore variant inventory
-      if (targetOrderStatus === 'cancelled' && oldOrder.order_status !== 'cancelled') {
-        const [items] = await connection.query(
-          'SELECT variant_id, quantity FROM order_items WHERE order_id = ?',
-          [id]
-        );
-        for (const item of items) {
-          if (item.variant_id) {
-            await connection.query(
-              'UPDATE product_variants SET stock = stock + ? WHERE variant_id = ?',
-              [item.quantity, item.variant_id]
-            );
+        // If cancelled, restore variant inventory
+        if (targetOrderStatus === 'cancelled' && oldOrder.order_status !== 'cancelled') {
+          for (const item of oldOrder.items) {
+            if (item.variant_id) {
+              await tx.productVariant.update({
+                where: { variant_id: item.variant_id },
+                data: { stock: { increment: item.quantity } },
+              });
+            }
           }
+        }
+
+        // If completed, automatically mark payment as paid if unpaid
+        if (targetOrderStatus === 'completed' && oldOrder.payment_status !== 'paid') {
+          await tx.order.update({
+            where: { order_id: orderId },
+            data: { payment_status: 'paid' },
+          });
+
+          await tx.payment.updateMany({
+            where: { order_id: orderId },
+            data: {
+              payment_status: 'success',
+              paid_at: new Date(),
+            },
+          });
         }
       }
 
-      // If completed, automatically mark payment as paid if unpaid
-      if (targetOrderStatus === 'completed' && oldOrder.payment_status !== 'paid') {
-        await connection.query(
-          'UPDATE orders SET payment_status = "paid" WHERE order_id = ?',
-          [id]
-        );
-        await connection.query(
-          'UPDATE payments SET payment_status = "success", paid_at = CURRENT_TIMESTAMP WHERE order_id = ?',
-          [id]
-        );
+      if (targetPaymentStatus && targetPaymentStatus !== oldOrder.payment_status) {
+        await tx.order.update({
+          where: { order_id: orderId },
+          data: { payment_status: targetPaymentStatus },
+        });
+
+        if (targetPaymentStatus === 'paid') {
+          await tx.payment.updateMany({
+            where: { order_id: orderId },
+            data: {
+              payment_status: 'success',
+              paid_at: new Date(),
+            },
+          });
+        }
       }
-    }
+    });
 
-    if (targetPaymentStatus && targetPaymentStatus !== oldOrder.payment_status) {
-      await connection.query(
-        'UPDATE orders SET payment_status = ? WHERE order_id = ?',
-        [targetPaymentStatus, id]
-      );
-
-      if (targetPaymentStatus === 'paid') {
-        await connection.query(
-          'UPDATE payments SET payment_status = "success", paid_at = CURRENT_TIMESTAMP WHERE order_id = ?',
-          [id]
-        );
-      }
-    }
-
-    await connection.commit();
     return successResponse(res, null, 'Cập nhật trạng thái đơn hàng thành công');
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
 // [PUT] /api/orders/:id/cancel (Khách hàng tự hủy đơn khi đơn còn ở trạng thái pending)
 async function cancelOrder(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
+    const orderId = BigInt(req.params.id);
+    const userId = BigInt(req.user.user_id);
 
-    const { id } = req.params;
-    const userId = req.user.user_id;
+    const order = await prisma.order.findFirst({
+      where: {
+        order_id: orderId,
+        user_id: userId,
+      },
+      include: { items: true },
+    });
 
-    const [orders] = await connection.query(
-      'SELECT * FROM orders WHERE order_id = ? AND user_id = ? FOR UPDATE',
-      [id, userId]
-    );
-
-    if (orders.length === 0) {
-      await connection.rollback();
+    if (!order) {
       return errorResponse(res, 'Không tìm thấy đơn hàng của bạn', 404);
     }
 
-    const order = orders[0];
     if (order.order_status !== 'pending') {
-      await connection.rollback();
       return errorResponse(res, 'Chỉ có thể hủy đơn hàng đang ở trạng thái "Chờ xác nhận"', 400);
     }
 
-    // Update status to cancelled
-    await connection.query(
-      'UPDATE orders SET order_status = "cancelled" WHERE order_id = ?',
-      [id]
-    );
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { order_id: orderId },
+        data: { order_status: 'cancelled' },
+      });
 
-    // Record status history
-    await connection.query(
-      'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status) VALUES (?, ?, ?, "cancelled")',
-      [id, userId, order.order_status]
-    );
+      await tx.orderStatusHistory.create({
+        data: {
+          order_id: orderId,
+          changed_by: userId,
+          old_status: order.order_status,
+          new_status: 'cancelled',
+        },
+      });
 
-    // Restore inventory stock
-    const [items] = await connection.query(
-      'SELECT variant_id, quantity FROM order_items WHERE order_id = ?',
-      [id]
-    );
-    for (const item of items) {
-      if (item.variant_id) {
-        await connection.query(
-          'UPDATE product_variants SET stock = stock + ? WHERE variant_id = ?',
-          [item.quantity, item.variant_id]
-        );
+      for (const item of order.items) {
+        if (item.variant_id) {
+          await tx.productVariant.update({
+            where: { variant_id: item.variant_id },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
       }
-    }
+    });
 
-    await connection.commit();
     return successResponse(res, null, 'Hủy đơn hàng thành công');
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
@@ -618,5 +704,5 @@ module.exports = {
   getOrderDetail,
   getAllOrders,
   updateOrderStatus,
-  cancelOrder
+  cancelOrder,
 };

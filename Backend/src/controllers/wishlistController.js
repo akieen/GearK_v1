@@ -1,44 +1,59 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
 async function getOrCreateWishlistId(userId) {
-  const [rows] = await pool.query('SELECT wishlist_id FROM wishlists WHERE user_id = ? LIMIT 1', [userId]);
-  if (rows.length > 0) {
-    return rows[0].wishlist_id;
+  const existing = await prisma.wishlist.findUnique({
+    where: { user_id: userId },
+  });
+  if (existing) {
+    return existing.wishlist_id;
   }
-  const [res] = await pool.query('INSERT INTO wishlists (user_id) VALUES (?)', [userId]);
-  return res.insertId;
+  const created = await prisma.wishlist.create({
+    data: { user_id: userId },
+  });
+  return created.wishlist_id;
 }
 
 // [GET] /api/wishlist
 async function getWishlist(req, res, next) {
   try {
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const wishlistId = await getOrCreateWishlistId(userId);
 
-    const [items] = await pool.query(`
-      SELECT 
-        wi.wishlist_item_id,
-        wi.created_at,
-        v.variant_id,
-        v.variant_name,
-        v.price,
-        v.sale_price,
-        v.stock,
-        p.product_id,
-        p.product_name,
-        p.slug,
-        p.thumbnail_url,
-        b.brand_name
-      FROM wishlist_items wi
-      JOIN product_variants v ON wi.variant_id = v.variant_id
-      JOIN products p ON v.product_id = p.product_id
-      LEFT JOIN brands b ON p.brand_id = b.brand_id
-      WHERE wi.wishlist_id = ?
-      ORDER BY wi.created_at DESC
-    `, [wishlistId]);
+    const items = await prisma.wishlistItem.findMany({
+      where: { wishlist_id: wishlistId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        variant: {
+          include: {
+            product: {
+              include: {
+                brand: {
+                  select: { brand_name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
-    return successResponse(res, items, 'Danh sách sản phẩm yêu thích');
+    const formatted = items.map((wi) => ({
+      wishlist_item_id: wi.wishlist_item_id,
+      created_at: wi.created_at,
+      variant_id: wi.variant?.variant_id,
+      variant_name: wi.variant?.variant_name,
+      price: wi.variant?.price,
+      sale_price: wi.variant?.sale_price,
+      stock: wi.variant?.stock,
+      product_id: wi.variant?.product?.product_id,
+      product_name: wi.variant?.product?.product_name,
+      slug: wi.variant?.product?.slug,
+      thumbnail_url: wi.variant?.product?.thumbnail_url,
+      brand_name: wi.variant?.product?.brand?.brand_name || null,
+    }));
+
+    return successResponse(res, formatted, 'Danh sách sản phẩm yêu thích');
   } catch (error) {
     next(error);
   }
@@ -47,19 +62,21 @@ async function getWishlist(req, res, next) {
 // [POST] /api/wishlist/toggle
 async function toggleWishlist(req, res, next) {
   try {
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const { variant_id, product_id } = req.body;
 
-    let targetVariantId = variant_id;
+    let targetVariantId = variant_id ? BigInt(variant_id) : null;
 
     // If variant_id is not provided, look up the default/first variant of this product
     if (!targetVariantId && product_id) {
-      const [variants] = await pool.query(
-        'SELECT variant_id FROM product_variants WHERE product_id = ? ORDER BY variant_id ASC LIMIT 1',
-        [product_id]
-      );
-      if (variants.length > 0) {
-        targetVariantId = variants[0].variant_id;
+      const parsedProductId = BigInt(product_id);
+      const firstVariant = await prisma.productVariant.findFirst({
+        where: { product_id: parsedProductId },
+        orderBy: { variant_id: 'asc' },
+      });
+
+      if (firstVariant) {
+        targetVariantId = firstVariant.variant_id;
       } else {
         return errorResponse(res, 'Sản phẩm này chưa có biến thể nào trong hệ thống', 400);
       }
@@ -74,28 +91,36 @@ async function toggleWishlist(req, res, next) {
     // Check if item or product is already in wishlist
     let existingItem = null;
     if (variant_id) {
-      const [existing] = await pool.query(
-        'SELECT wishlist_item_id FROM wishlist_items WHERE wishlist_id = ? AND variant_id = ?',
-        [wishlistId, targetVariantId]
-      );
-      if (existing.length > 0) existingItem = existing[0];
+      existingItem = await prisma.wishlistItem.findFirst({
+        where: {
+          wishlist_id: wishlistId,
+          variant_id: targetVariantId,
+        },
+      });
     } else if (product_id) {
-      const [existing] = await pool.query(
-        `SELECT wi.wishlist_item_id 
-         FROM wishlist_items wi
-         JOIN product_variants v ON wi.variant_id = v.variant_id
-         WHERE wi.wishlist_id = ? AND v.product_id = ?
-         LIMIT 1`,
-        [wishlistId, product_id]
-      );
-      if (existing.length > 0) existingItem = existing[0];
+      const parsedProductId = BigInt(product_id);
+      existingItem = await prisma.wishlistItem.findFirst({
+        where: {
+          wishlist_id: wishlistId,
+          variant: {
+            product_id: parsedProductId,
+          },
+        },
+      });
     }
 
     if (existingItem) {
-      await pool.query('DELETE FROM wishlist_items WHERE wishlist_item_id = ?', [existingItem.wishlist_item_id]);
+      await prisma.wishlistItem.delete({
+        where: { wishlist_item_id: existingItem.wishlist_item_id },
+      });
       return successResponse(res, { in_wishlist: false }, 'Đã xóa khỏi danh sách yêu thích');
     } else {
-      await pool.query('INSERT INTO wishlist_items (wishlist_id, variant_id) VALUES (?, ?)', [wishlistId, targetVariantId]);
+      await prisma.wishlistItem.create({
+        data: {
+          wishlist_id: wishlistId,
+          variant_id: targetVariantId,
+        },
+      });
       return successResponse(res, { in_wishlist: true }, 'Đã thêm vào danh sách yêu thích');
     }
   } catch (error) {
@@ -105,5 +130,5 @@ async function toggleWishlist(req, res, next) {
 
 module.exports = {
   getWishlist,
-  toggleWishlist
+  toggleWishlist,
 };

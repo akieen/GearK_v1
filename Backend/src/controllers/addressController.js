@@ -1,14 +1,14 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
 // [GET] /api/addresses
 async function getAddresses(req, res, next) {
   try {
-    const userId = req.user.user_id;
-    const [rows] = await pool.query(
-      'SELECT * FROM addresses WHERE user_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
+    const userId = BigInt(req.user.user_id);
+    const rows = await prisma.address.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+    });
     return successResponse(res, rows, 'Danh sách địa chỉ');
   } catch (error) {
     next(error);
@@ -18,25 +18,29 @@ async function getAddresses(req, res, next) {
 // [POST] /api/addresses
 async function createAddress(req, res, next) {
   try {
-    const userId = req.user.user_id;
+    const userId = BigInt(req.user.user_id);
     const { recipient_name, recipient_phone, street_address } = req.body;
 
     if (!recipient_name || !recipient_phone || !street_address) {
       return errorResponse(res, 'Vui lòng điền đầy đủ họ tên người nhận, số điện thoại và địa chỉ giao hàng', 400);
     }
 
-    const [result] = await pool.query(
-      'INSERT INTO addresses (user_id, recipient_name, recipient_phone, street_address) VALUES (?, ?, ?, ?)',
-      [userId, recipient_name, recipient_phone, street_address]
-    );
+    const newAddress = await prisma.address.create({
+      data: {
+        user_id: userId,
+        recipient_name: recipient_name.trim(),
+        recipient_phone: recipient_phone.trim(),
+        street_address: street_address.trim(),
+      },
+    });
 
     return successResponse(
       res,
       {
-        address_id: result.insertId,
-        recipient_name,
-        recipient_phone,
-        street_address
+        address_id: newAddress.address_id,
+        recipient_name: newAddress.recipient_name,
+        recipient_phone: newAddress.recipient_phone,
+        street_address: newAddress.street_address,
       },
       'Thêm địa chỉ giao hàng thành công',
       201
@@ -49,27 +53,30 @@ async function createAddress(req, res, next) {
 // [PUT] /api/addresses/:id
 async function updateAddress(req, res, next) {
   try {
-    const userId = req.user.user_id;
-    const { id } = req.params;
+    const userId = BigInt(req.user.user_id);
+    const addressId = BigInt(req.params.id);
     const { recipient_name, recipient_phone, street_address } = req.body;
 
-    const [existing] = await pool.query(
-      'SELECT * FROM addresses WHERE address_id = ? AND user_id = ?',
-      [id, userId]
-    );
+    const existing = await prisma.address.findFirst({
+      where: {
+        address_id: addressId,
+        user_id: userId,
+      },
+    });
 
-    if (existing.length === 0) {
+    if (!existing) {
       return errorResponse(res, 'Địa chỉ không tồn tại', 404);
     }
 
-    await pool.query(
-      `UPDATE addresses SET
-        recipient_name = COALESCE(?, recipient_name),
-        recipient_phone = COALESCE(?, recipient_phone),
-        street_address = COALESCE(?, street_address)
-       WHERE address_id = ? AND user_id = ?`,
-      [recipient_name, recipient_phone, street_address, id, userId]
-    );
+    const updateData = {};
+    if (recipient_name !== undefined) updateData.recipient_name = recipient_name.trim();
+    if (recipient_phone !== undefined) updateData.recipient_phone = recipient_phone.trim();
+    if (street_address !== undefined) updateData.street_address = street_address.trim();
+
+    await prisma.address.update({
+      where: { address_id: addressId },
+      data: updateData,
+    });
 
     return successResponse(res, null, 'Cập nhật địa chỉ thành công');
   } catch (error) {
@@ -80,17 +87,23 @@ async function updateAddress(req, res, next) {
 // [DELETE] /api/addresses/:id
 async function deleteAddress(req, res, next) {
   try {
-    const userId = req.user.user_id;
-    const { id } = req.params;
+    const userId = BigInt(req.user.user_id);
+    const addressId = BigInt(req.params.id);
 
-    const [result] = await pool.query(
-      'DELETE FROM addresses WHERE address_id = ? AND user_id = ?',
-      [id, userId]
-    );
+    const existing = await prisma.address.findFirst({
+      where: {
+        address_id: addressId,
+        user_id: userId,
+      },
+    });
 
-    if (result.affectedRows === 0) {
+    if (!existing) {
       return errorResponse(res, 'Địa chỉ không tồn tại', 404);
     }
+
+    await prisma.address.delete({
+      where: { address_id: addressId },
+    });
 
     return successResponse(res, null, 'Xóa địa chỉ thành công');
   } catch (error) {
@@ -102,5 +115,5 @@ module.exports = {
   getAddresses,
   createAddress,
   updateAddress,
-  deleteAddress
+  deleteAddress,
 };

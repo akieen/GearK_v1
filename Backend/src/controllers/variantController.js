@@ -1,4 +1,4 @@
-const { pool } = require('../config/db');
+const prisma = require('../config/prisma');
 const { generateSku, successResponse, errorResponse } = require('../utils/helpers');
 
 // Helper to safely format specifications for MySQL JSON column
@@ -23,7 +23,7 @@ function normalizeSpecifications(specifications) {
 // [POST] /api/products/:id/variants (Admin / Staff)
 async function addVariant(req, res, next) {
   try {
-    const { id } = req.params;
+    const productId = BigInt(req.params.id);
     let { sku, variant_name, specifications, price, sale_price, stock = 0, warranty_months = 12, images = [] } = req.body;
 
     if (!variant_name || price === undefined) {
@@ -46,47 +46,61 @@ async function addVariant(req, res, next) {
 
     let finalSku = (sku && typeof sku === 'string' && sku.trim()) ? sku.trim().toUpperCase() : null;
     if (!finalSku) {
-      const [prodRows] = await pool.query('SELECT product_name FROM products WHERE product_id = ?', [id]);
-      const prodName = prodRows.length > 0 ? prodRows[0].product_name : '';
+      const product = await prisma.product.findUnique({
+        where: { product_id: productId },
+        select: { product_name: true },
+      });
+      const prodName = product ? product.product_name : '';
       finalSku = generateSku(prodName, variant_name);
     }
 
     const specs = normalizeSpecifications(specifications);
 
-    const [result] = await pool.query(
-      `INSERT INTO product_variants (product_id, sku, variant_name, specifications, price, sale_price, stock, warranty_months)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, finalSku, variant_name, specs, price, sale_price || null, stock, warranty_months]
-    );
-
-    const variantId = result.insertId;
+    const createdVariant = await prisma.productVariant.create({
+      data: {
+        product_id: productId,
+        sku: finalSku,
+        variant_name: variant_name.trim(),
+        specifications: specs,
+        price: Number(price),
+        sale_price: sale_price !== undefined && sale_price !== null && sale_price !== '' ? Number(sale_price) : null,
+        stock: parseInt(stock, 10) || 0,
+        warranty_months: parseInt(warranty_months, 10) || 0,
+      },
+    });
 
     // Insert variant images
     if (allImages.length > 0) {
+      const imageData = [];
       for (let i = 0; i < allImages.length; i++) {
         const img = allImages[i];
-        const imgUrl = typeof img === 'string' ? img : img.image_url;
+        const imgUrl = typeof img === 'string' ? img : img?.image_url;
         if (!imgUrl) continue;
-        const isPrimary = (typeof img === 'object' && img.is_primary) ? 1 : (i === 0 ? 1 : 0);
-        await pool.query(
-          `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
-           VALUES (?, ?, ?, ?)`,
-          [variantId, imgUrl, isPrimary, i]
-        );
+        const isPrimary = (typeof img === 'object' && img?.is_primary) ? true : (i === 0);
+        imageData.push({
+          variant_id: createdVariant.variant_id,
+          image_url: imgUrl,
+          is_primary: isPrimary,
+          sort_order: i,
+        });
+      }
+      if (imageData.length > 0) {
+        await prisma.variantImage.createMany({
+          data: imageData,
+        });
       }
     }
 
-    // Fetch created variant with images
-    const [createdImages] = await pool.query(
-      'SELECT image_id, variant_id, image_url, is_primary, sort_order FROM variant_images WHERE variant_id = ? ORDER BY sort_order ASC',
-      [variantId]
-    );
+    const createdImages = await prisma.variantImage.findMany({
+      where: { variant_id: createdVariant.variant_id },
+      orderBy: { sort_order: 'asc' },
+    });
 
     return successResponse(
       res,
       {
-        variant_id: variantId,
-        product_id: parseInt(id, 10),
+        variant_id: createdVariant.variant_id,
+        product_id: createdVariant.product_id,
         sku: finalSku,
         variant_name,
         price,
@@ -99,8 +113,8 @@ async function addVariant(req, res, next) {
       201
     );
   } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      return errorResponse(res, `Mã SKU đã tồn tại trên hệ thống. Vui lòng thử mã khác.`, 400);
+    if (error.code === 'P2002') {
+      return errorResponse(res, 'Mã SKU đã tồn tại trên hệ thống. Vui lòng thử mã khác.', 400);
     }
     next(error);
   }
@@ -109,44 +123,36 @@ async function addVariant(req, res, next) {
 // [PUT] /api/products/variants/:variantId (Admin / Staff)
 async function updateVariant(req, res, next) {
   try {
-    const { variantId } = req.params;
+    const variantId = BigInt(req.params.variantId);
     const { sku, variant_name, specifications, price, sale_price, stock, warranty_months } = req.body;
 
-    const [existing] = await pool.query('SELECT * FROM product_variants WHERE variant_id = ?', [variantId]);
-    if (existing.length === 0) {
+    const existing = await prisma.productVariant.findUnique({
+      where: { variant_id: variantId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Phiên bản không tồn tại', 404);
     }
 
-    const specs = specifications !== undefined
-      ? normalizeSpecifications(specifications)
-      : existing[0].specifications;
+    const updateData = {};
+    if (sku !== undefined && sku.trim()) updateData.sku = sku.trim().toUpperCase();
+    if (variant_name !== undefined) updateData.variant_name = variant_name.trim();
+    if (specifications !== undefined) updateData.specifications = normalizeSpecifications(specifications);
+    if (price !== undefined) updateData.price = Number(price);
+    if (sale_price !== undefined) {
+      updateData.sale_price = (sale_price !== null && sale_price !== '') ? Number(sale_price) : null;
+    }
+    if (stock !== undefined) updateData.stock = parseInt(stock, 10);
+    if (warranty_months !== undefined) updateData.warranty_months = parseInt(warranty_months, 10);
 
-    await pool.query(
-      `UPDATE product_variants SET
-        sku = COALESCE(?, sku),
-        variant_name = COALESCE(?, variant_name),
-        specifications = ?,
-        price = COALESCE(?, price),
-        sale_price = ?,
-        stock = COALESCE(?, stock),
-        warranty_months = COALESCE(?, warranty_months)
-       WHERE variant_id = ?`,
-      [
-        sku,
-        variant_name,
-        specs,
-        price,
-        sale_price !== undefined ? sale_price : existing[0].sale_price,
-        stock,
-        warranty_months,
-        variantId
-      ]
-    );
+    await prisma.productVariant.update({
+      where: { variant_id: variantId },
+      data: updateData,
+    });
 
     return successResponse(res, null, 'Cập nhật phiên bản thành công');
   } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      return errorResponse(res, `Mã SKU đã tồn tại trên hệ thống.`, 400);
+    if (error.code === 'P2002') {
+      return errorResponse(res, 'Mã SKU đã tồn tại trên hệ thống.', 400);
     }
     next(error);
   }
@@ -155,11 +161,19 @@ async function updateVariant(req, res, next) {
 // [DELETE] /api/products/variants/:variantId (Admin only)
 async function deleteVariant(req, res, next) {
   try {
-    const { variantId } = req.params;
-    const [result] = await pool.query('DELETE FROM product_variants WHERE variant_id = ?', [variantId]);
-    if (result.affectedRows === 0) {
+    const variantId = BigInt(req.params.variantId);
+
+    const existing = await prisma.productVariant.findUnique({
+      where: { variant_id: variantId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Phiên bản không tồn tại', 404);
     }
+
+    await prisma.productVariant.delete({
+      where: { variant_id: variantId },
+    });
+
     return successResponse(res, null, 'Xóa phiên bản sản phẩm thành công');
   } catch (error) {
     next(error);
@@ -169,14 +183,15 @@ async function deleteVariant(req, res, next) {
 // [GET] /api/products/variants/:variantId/images
 async function getVariantImages(req, res, next) {
   try {
-    const { variantId } = req.params;
-    const [images] = await pool.query(
-      `SELECT image_id, variant_id, image_url, is_primary, sort_order, created_at
-       FROM variant_images
-       WHERE variant_id = ?
-       ORDER BY is_primary DESC, sort_order ASC, created_at ASC`,
-      [variantId]
-    );
+    const variantId = BigInt(req.params.variantId);
+    const images = await prisma.variantImage.findMany({
+      where: { variant_id: variantId },
+      orderBy: [
+        { is_primary: 'desc' },
+        { sort_order: 'asc' },
+        { created_at: 'asc' },
+      ],
+    });
     return successResponse(res, images, 'Danh sách ảnh của biến thể');
   } catch (error) {
     next(error);
@@ -186,7 +201,7 @@ async function getVariantImages(req, res, next) {
 // [POST] /api/products/variants/:variantId/images (Admin / Staff)
 async function addVariantImage(req, res, next) {
   try {
-    const { variantId } = req.params;
+    const variantId = BigInt(req.params.variantId);
     let imageUrl = req.body?.image_url;
     if (req.file) {
       imageUrl = `/uploads/${req.file.filename}`;
@@ -198,33 +213,43 @@ async function addVariantImage(req, res, next) {
       return errorResponse(res, 'Vui lòng cung cấp tệp ảnh hoặc URL ảnh', 400);
     }
 
-    const [variantRows] = await pool.query('SELECT * FROM product_variants WHERE variant_id = ?', [variantId]);
-    if (variantRows.length === 0) {
+    const variant = await prisma.productVariant.findUnique({
+      where: { variant_id: variantId },
+    });
+    if (!variant) {
       return errorResponse(res, 'Biến thể không tồn tại', 404);
     }
 
-    const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM variant_images WHERE variant_id = ?', [variantId]);
-    const isFirst = countRows[0].total === 0;
+    const count = await prisma.variantImage.count({
+      where: { variant_id: variantId },
+    });
+    const isFirst = count === 0;
     const requestedPrimary = req.body?.is_primary === 'true' || req.body?.is_primary === true || req.body?.is_primary === 1 || isFirst;
 
     if (requestedPrimary) {
-      await pool.query('UPDATE variant_images SET is_primary = 0 WHERE variant_id = ?', [variantId]);
+      await prisma.variantImage.updateMany({
+        where: { variant_id: variantId },
+        data: { is_primary: false },
+      });
     }
 
-    const [insertResult] = await pool.query(
-      `INSERT INTO variant_images (variant_id, image_url, is_primary, sort_order)
-       VALUES (?, ?, ?, ?)`,
-      [variantId, imageUrl, requestedPrimary ? 1 : 0, countRows[0].total]
-    );
+    const newImg = await prisma.variantImage.create({
+      data: {
+        variant_id: variantId,
+        image_url: imageUrl,
+        is_primary: !!requestedPrimary,
+        sort_order: count,
+      },
+    });
 
     return successResponse(
       res,
       {
-        image_id: insertResult.insertId,
-        variant_id: parseInt(variantId, 10),
+        image_id: newImg.image_id,
+        variant_id: newImg.variant_id,
         image_url: imageUrl,
-        is_primary: requestedPrimary ? 1 : 0,
-        sort_order: countRows[0].total,
+        is_primary: newImg.is_primary ? 1 : 0,
+        sort_order: count,
       },
       'Thêm ảnh cho biến thể thành công',
       201
@@ -237,24 +262,32 @@ async function addVariantImage(req, res, next) {
 // [DELETE] /api/products/variants/images/:imageId (Admin / Staff)
 async function deleteVariantImage(req, res, next) {
   try {
-    const { imageId } = req.params;
-    const [existing] = await pool.query('SELECT * FROM variant_images WHERE image_id = ?', [imageId]);
-    if (existing.length === 0) {
+    const imageId = BigInt(req.params.imageId);
+
+    const existing = await prisma.variantImage.findUnique({
+      where: { image_id: imageId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Ảnh biến thể không tồn tại', 404);
     }
 
-    const variantId = existing[0].variant_id;
-    const wasPrimary = existing[0].is_primary === 1;
+    const variantId = existing.variant_id;
+    const wasPrimary = existing.is_primary;
 
-    await pool.query('DELETE FROM variant_images WHERE image_id = ?', [imageId]);
+    await prisma.variantImage.delete({
+      where: { image_id: imageId },
+    });
 
     if (wasPrimary) {
-      const [remaining] = await pool.query(
-        'SELECT image_id FROM variant_images WHERE variant_id = ? ORDER BY sort_order ASC, image_id ASC LIMIT 1',
-        [variantId]
-      );
-      if (remaining.length > 0) {
-        await pool.query('UPDATE variant_images SET is_primary = 1 WHERE image_id = ?', [remaining[0].image_id]);
+      const remaining = await prisma.variantImage.findFirst({
+        where: { variant_id: variantId },
+        orderBy: [{ sort_order: 'asc' }, { image_id: 'asc' }],
+      });
+      if (remaining) {
+        await prisma.variantImage.update({
+          where: { image_id: remaining.image_id },
+          data: { is_primary: true },
+        });
       }
     }
 
@@ -266,31 +299,32 @@ async function deleteVariantImage(req, res, next) {
 
 // [PUT] /api/products/variants/images/:imageId/primary (Admin / Staff)
 async function setPrimaryVariantImage(req, res, next) {
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
-    const { imageId } = req.params;
+    const imageId = BigInt(req.params.imageId);
 
-    const [existing] = await connection.query('SELECT * FROM variant_images WHERE image_id = ?', [imageId]);
-    if (existing.length === 0) {
-      await connection.rollback();
+    const existing = await prisma.variantImage.findUnique({
+      where: { image_id: imageId },
+    });
+    if (!existing) {
       return errorResponse(res, 'Ảnh biến thể không tồn tại', 404);
     }
 
-    const variantId = existing[0].variant_id;
+    const variantId = existing.variant_id;
 
-    // Reset all variant images to non-primary
-    await connection.query('UPDATE variant_images SET is_primary = 0 WHERE variant_id = ?', [variantId]);
-    // Set this image as primary
-    await connection.query('UPDATE variant_images SET is_primary = 1 WHERE image_id = ?', [imageId]);
+    await prisma.$transaction([
+      prisma.variantImage.updateMany({
+        where: { variant_id: variantId },
+        data: { is_primary: false },
+      }),
+      prisma.variantImage.update({
+        where: { image_id: imageId },
+        data: { is_primary: true },
+      }),
+    ]);
 
-    await connection.commit();
     return successResponse(res, null, 'Đã đặt ảnh làm ảnh chính cho biến thể');
   } catch (error) {
-    await connection.rollback();
     next(error);
-  } finally {
-    connection.release();
   }
 }
 
