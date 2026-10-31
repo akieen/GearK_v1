@@ -23,6 +23,7 @@ export const ProductCard = ({ product, onNavigate }) => {
 
   const handleQuickAdd = async (e) => {
     e.stopPropagation();
+    e.currentTarget?.blur?.();
     if (product.variant_id) {
       await addToCart(product.variant_id, 1);
     } else {

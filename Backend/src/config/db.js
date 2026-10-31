@@ -18,12 +18,20 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0
 });
 
-// Test MySQL database connection
+// Test MySQL database connection (both pool and Prisma)
 async function testConnection() {
   try {
     const connection = await pool.getConnection();
     console.log(`[Database] Đã kết nối thành công tới MySQL database: ${process.env.DB_NAME || 'geark_db'} trên port ${process.env.DB_PORT || 3306}`);
     connection.release();
+
+    try {
+      await prisma.$connect();
+      console.log('[Database] Prisma ORM đã kết nối thành công tới cơ sở dữ liệu.');
+    } catch (prismaErr) {
+      console.error('[Database Warning] Lỗi kết nối Prisma ORM:', prismaErr.message);
+    }
+
     return true;
   } catch (error) {
     console.error('[Database Error] Không thể kết nối tới cơ sở dữ liệu MySQL:');

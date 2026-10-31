@@ -24,7 +24,7 @@ export default function StatsTab({ stats, formatPrice, formatDate, getOrderStatu
 
   const metrics = [
     { label: 'Khách hàng mới (Clients)', value: totalCustomers, badge: '+18.33%', up: true, icon: <PersonOutlineIcon sx={{ fontSize: 28 }} /> },
-    { label: 'Doanh thu tháng (Earnings)', value: formatPrice(totalRevenue), icon: <CreditCardIcon sx={{ fontSize: 28 }} /> },
+    { label: 'Doanh thu tháng (Earnings)', value: formatPrice(totalRevenue) },
     { label: 'Tổng đơn hàng (Orders)', value: totalOrders, badge: '-5.2%', up: false, icon: <DescriptionOutlinedIcon sx={{ fontSize: 28 }} /> },
     { label: 'Sản phẩm trong kho (Catalog)', value: totalProducts, icon: <Inventory2Icon sx={{ fontSize: 28 }} /> },
   ];
