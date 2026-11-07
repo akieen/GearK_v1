@@ -18,12 +18,9 @@ import Collapse from '@mui/material/Collapse';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
-import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import StarIcon from '@mui/icons-material/Star';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -105,6 +102,16 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
     ['products', 'variants', 'categories', 'brands'].includes(initialTab)
   );
 
+  // Dashboard UI Scale: mặc định 0.8 (giảm 20% kích thước hiển thị theo yêu cầu)
+  const [uiScale, setUiScale] = useState(() => {
+    return localStorage.getItem('geark_dashboard_scale') || '0.8';
+  });
+
+  const handleScaleChange = (scale) => {
+    setUiScale(scale);
+    localStorage.setItem('geark_dashboard_scale', scale);
+  };
+
   useEffect(() => {
     const tabFromUrl = PATH_TO_TAB[currentTab?.toLowerCase()] || 'stats';
     if (tabFromUrl !== activeTab) {
@@ -123,6 +130,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
     const path = TAB_TO_PATH[tabId] || 'admin/dashboard';
     onNavigate(path);
   };
+
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -424,22 +432,22 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
 
   const navBtnSx = (active) => ({
     flexGrow: 0,
-    borderRadius: '10px',
-    mb: 0.5,
-    px: 1.5,
-    py: 1,
+    borderRadius: '8px',
+    mb: 0.4,
+    px: 1.25,
+    py: 0.75,
     color: active ? '#FFFFFF' : '#64748B',
     background: active ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'transparent',
-    boxShadow: active ? '0 6px 14px rgba(220, 38, 38, 0.28)' : 'none',
+    boxShadow: active ? '0 4px 10px rgba(220, 38, 38, 0.25)' : 'none',
     '&:hover': {
       background: active ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : '#F8FAFC',
       color: active ? '#FFFFFF' : '#1E293B',
     },
-    '& .MuiListItemIcon-root': { color: active ? '#FFFFFF' : 'inherit', minWidth: 30 },
+    '& .MuiListItemIcon-root': { color: active ? '#FFFFFF' : 'inherit', minWidth: 26 },
   });
 
   const renderGroupTitle = (title) => (
-    <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.8px', textTransform: 'uppercase', mt: 2, mb: 0.75, px: 1 }}>
+    <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', letterSpacing: '0.8px', textTransform: 'uppercase', mt: 1.5, mb: 0.5, px: 0.75 }}>
       {title}
     </Typography>
   );
@@ -451,47 +459,55 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
         {icon && <ListItemIcon>{icon}</ListItemIcon>}
         <ListItemText
           primary={label}
-          primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 600, noWrap: true }}
+          primaryTypographyProps={{ fontSize: 12.5, fontWeight: active ? 700 : 600, noWrap: true }}
         />
         {extra}
       </ListItemButton>
     );
   };
 
-  const iconPillSx = { width: 38, height: 38, bgcolor: '#FFFFFF', border: '1px solid #EEF2F6', color: '#64748B' };
+  const iconPillSx = { width: 34, height: 34, bgcolor: '#FFFFFF', border: '1px solid #EEF2F6', color: '#64748B' };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F4F7FD', color: '#1E293B' }}>
-      {/* Sidebar */}
+    <Box
+      sx={{
+        display: 'flex',
+        minHeight: '100vh',
+        bgcolor: '#F4F7FD',
+        color: '#1E293B',
+        zoom: uiScale, // Tỉ lệ hiển thị (mặc định 0.8 = giảm 20%)
+      }}
+    >
+      {/* Sidebar (Thu gọn tỉ lệ từ 250px xuống 210px) */}
       <Box
         component="aside"
         sx={{
-          width: 250,
+          width: 210,
           bgcolor: '#FFFFFF',
           borderRight: '1px solid #E2E8F0',
           display: 'flex',
           flexDirection: 'column',
-          p: '24px 16px',
+          p: '16px 12px',
           flexShrink: 0,
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ px: 1, pb: 2.5 }}>
+        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ px: 0.75, pb: 2 }}>
           <Box
             sx={{
-              width: 36,
-              height: 36,
-              borderRadius: '10px',
+              width: 32,
+              height: 32,
+              borderRadius: '8px',
               background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#FFFFFF',
-              boxShadow: '0 4px 14px rgba(220, 38, 38, 0.35)',
+              boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
             }}
           >
-            <FlagOutlinedIcon fontSize="small" />
+            <FlagOutlinedIcon sx={{ fontSize: 18 }} />
           </Box>
-          <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.5px' }}>
+          <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.3px' }}>
             GearK Dash
           </Typography>
         </Stack>
@@ -522,12 +538,12 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
             }}
           >
             <ListItemIcon><DescriptionOutlinedIcon sx={{ fontSize: 18 }} /></ListItemIcon>
-            <ListItemText primary="Quản lý Sản phẩm" primaryTypographyProps={{ fontSize: 13.5, fontWeight: 600, noWrap: true }} />
+            <ListItemText primary="Quản lý Sản phẩm" primaryTypographyProps={{ fontSize: 12.5, fontWeight: 600, noWrap: true }} />
             {productsMenuOpen ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
           </ListItemButton>
 
           <Collapse in={productsMenuOpen} timeout="auto" unmountOnExit>
-            <Stack sx={{ pl: 1.5, mb: 0.5, ml: 2, borderLeft: '2px solid #E2E8F0' }}>
+            <Stack sx={{ pl: 1.25, mb: 0.5, ml: 1.5, borderLeft: '2px solid #E2E8F0' }}>
               {[
                 { id: 'products', label: 'Danh sách sản phẩm' },
                 { id: 'variants', label: 'Phiên bản / Biến thể' },
@@ -541,15 +557,15 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
                     onClick={() => handleTabChange(sub.id)}
                     sx={{
                       flexGrow: 0,
-                      py: 0.75,
-                      px: 1.5,
-                      borderRadius: '8px',
+                      py: 0.6,
+                      px: 1.25,
+                      borderRadius: '6px',
                       color: subActive ? '#DC2626' : '#64748B',
                       bgcolor: subActive ? '#FEE2E2' : 'transparent',
                       '&:hover': { color: '#DC2626', bgcolor: '#FEF2F2' },
                     }}
                   >
-                    <ListItemText primary={sub.label} primaryTypographyProps={{ fontSize: 13, fontWeight: subActive ? 700 : 600 }} />
+                    <ListItemText primary={sub.label} primaryTypographyProps={{ fontSize: 12, fontWeight: subActive ? 700 : 600 }} />
                   </ListItemButton>
                 );
               })}
@@ -564,59 +580,106 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
             onClick={() => onNavigate('home')}
             sx={{ ...navBtnSx(false), mt: 'auto', color: '#DC2626', '&:hover': { bgcolor: '#FEF2F2', color: '#DC2626' } }}
           >
-            <ListItemIcon sx={{ color: '#DC2626 !important', minWidth: 30 }}>
+            <ListItemIcon sx={{ color: '#DC2626 !important', minWidth: 26 }}>
               <ChevronLeftIcon sx={{ fontSize: 18 }} />
             </ListItemIcon>
-            <ListItemText primary="Về Storefront" primaryTypographyProps={{ fontSize: 13.5, fontWeight: 600 }} />
+            <ListItemText primary="Về Storefront" primaryTypographyProps={{ fontSize: 12.5, fontWeight: 600 }} />
           </ListItemButton>
         </Box>
       </Box>
 
-      {/* Main Content */}
+      {/* Main Content (Thu gọn padding 20%) */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
-        <Stack component="header" direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 4, py: 2.25, gap: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+        <Stack component="header" direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, py: 1.75, gap: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1.25}>
             <IconButton title="Thông báo" sx={iconPillSx}>
               <Badge badgeContent={5} color="error"><NotificationsNoneOutlinedIcon sx={{ fontSize: 18 }} /></Badge>
             </IconButton>
             <IconButton title="Cài đặt" sx={iconPillSx}>
               <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
             </IconButton>
-            <Paper elevation={0} sx={{ px: 1.75, py: 0.75, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', color: '#64748B' }}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>EN</Typography>
+
+            {/* Điều khiển tỉ lệ hiển thị Dashboard (UI Scaling: 80% [mặc định giảm 20%], 90%, 100%) */}
+            <Paper
+              elevation={0}
+              sx={{
+                px: 1.25,
+                py: 0.35,
+                borderRadius: 5,
+                border: '1px solid #EEF2F6',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                bgcolor: '#FFFFFF',
+              }}
+            >
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', mr: 0.25 }}>
+                Tỉ lệ:
+              </Typography>
+              {[
+                { label: '80%', value: '0.8', title: 'Giảm 20% (Khuyên dùng)' },
+                { label: '90%', value: '0.9', title: 'Giảm 10%' },
+                { label: '100%', value: '1.0', title: 'Mặc định' },
+              ].map((item) => (
+                <Button
+                  key={item.value}
+                  size="small"
+                  onClick={() => handleScaleChange(item.value)}
+                  title={item.title}
+                  sx={{
+                    minWidth: 'auto',
+                    px: 0.75,
+                    py: 0.2,
+                    fontSize: 10.5,
+                    fontWeight: uiScale === item.value ? 800 : 600,
+                    borderRadius: 3,
+                    color: uiScale === item.value ? '#FFFFFF' : '#64748B',
+                    bgcolor: uiScale === item.value ? '#DC2626' : 'transparent',
+                    '&:hover': {
+                      bgcolor: uiScale === item.value ? '#B91C1C' : '#F1F5F9',
+                    },
+                  }}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </Paper>
+
+            <Paper elevation={0} sx={{ px: 1.5, py: 0.6, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 0.6, cursor: 'pointer', color: '#64748B' }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700 }}>EN</Typography>
               <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
             </Paper>
           </Stack>
 
-          <Stack direction="row" alignItems="center" spacing={2.5}>
-            <Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', px: 2.25, py: 0.75, width: 260, borderRadius: 99, border: '1px solid #EEF2F6' }}>
-              <InputBase placeholder="Search" sx={{ fontSize: 13.5, width: '100%' }} />
-              <SearchIcon sx={{ fontSize: 18, color: '#94A3B8' }} />
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', px: 2, py: 0.6, width: 220, borderRadius: 99, border: '1px solid #EEF2F6' }}>
+              <InputBase placeholder="Search" sx={{ fontSize: 12.5, width: '100%' }} />
+              <SearchIcon sx={{ fontSize: 17, color: '#94A3B8' }} />
             </Paper>
-            <Stack direction="row" alignItems="center" spacing={1.25} sx={{ cursor: 'pointer' }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ cursor: 'pointer' }}>
               <Avatar
                 src={user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-                sx={{ width: 36, height: 36, border: '2px solid #E2E8F0' }}
+                sx={{ width: 32, height: 32, border: '2px solid #E2E8F0' }}
               />
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: '#475569' }}>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
                 Hello, <strong>{user?.full_name || 'Jason Doe'}</strong>
               </Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 16, color: '#94A3B8' }} />
+              <KeyboardArrowDownIcon sx={{ fontSize: 15, color: '#94A3B8' }} />
             </Stack>
           </Stack>
         </Stack>
 
-        <Box sx={{ px: 4, pb: 5 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+        <Box sx={{ px: 3, pb: 4 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
             <Box>
-              <Typography sx={{ fontSize: 24, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.3px' }}>
+              <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.3px' }}>
                 Good Morning {user?.full_name ? user.full_name.split(' ').slice(-1)[0] : 'Jason'}!
               </Typography>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#94A3B8', mt: 0.5 }}>Dashboard</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', mt: 0.25 }}>Dashboard</Typography>
             </Box>
-            <Paper elevation={0} sx={{ px: 2, py: 1, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 1, color: '#64748B', cursor: 'pointer' }}>
-              <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Aug 23</Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+            <Paper elevation={0} sx={{ px: 1.75, py: 0.75, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 0.75, color: '#64748B', cursor: 'pointer' }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700 }}>Aug 23</Typography>
+              <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
             </Paper>
           </Stack>
 
@@ -692,3 +755,5 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
     </Box>
   );
 };
+
+export default AdminDashboardPage;
