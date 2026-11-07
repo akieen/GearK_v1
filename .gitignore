@@ -35,3 +35,5 @@ Thumbs.db
 Backend/public/uploads/*
 !Backend/public/uploads/.gitkeep
 
+.agents
+graphify-out

@@ -132,6 +132,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [targetVariantProductId, setTargetVariantProductId] = useState(null);
+  const [targetImportVariant, setTargetImportVariant] = useState(null);
 
   const [coupons, setCoupons] = useState([]);
   const [newCouponCode, setNewCouponCode] = useState('');
@@ -153,7 +154,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
   const [newVariantName, setNewVariantName] = useState('');
   const [newVariantPrice, setNewVariantPrice] = useState('');
   const [newVariantSalePrice, setNewVariantSalePrice] = useState('');
-  const [newVariantStock, setNewVariantStock] = useState('20');
+  const [newVariantStock, setNewVariantStock] = useState('0');
   const [newVariantImages, setNewVariantImages] = useState([]);
   const [submittingProduct, setSubmittingProduct] = useState(false);
 
@@ -250,17 +251,24 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
     }
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) return;
+  const handleDeleteProduct = async (id, hardDelete = false) => {
+    const confirmMsg = hardDelete
+      ? 'CẢNH BÁO NGUY HIỂM: Bạn có chắc chắn muốn XÓA VĨNH VIỄN sản phẩm này khỏi cơ sở dữ liệu không?\n\n- Thao tác này không thể hoàn tác.\n- Nếu sản phẩm đã phát sinh đơn hàng hoặc phiếu nhập kho, hệ thống sẽ chặn xóa để bảo vệ dữ liệu khóa ngoại.'
+      : 'Bạn có chắc chắn muốn chuyển sản phẩm này sang trạng thái "Lưu trữ" (ẩn khỏi danh sách kinh doanh)?';
+
+    if (!window.confirm(confirmMsg)) return;
+
     try {
-      const res = await productApi.deleteProduct(id);
+      const res = await productApi.deleteProduct(id, hardDelete);
       if (res.success) {
-        toast.success('Đã xóa sản phẩm thành công!');
+        toast.success(
+          hardDelete ? 'Đã xóa vĩnh viễn sản phẩm thành công!' : 'Đã chuyển sản phẩm vào Lưu trữ (archived)!'
+        );
         fetchProducts();
         fetchStats();
       }
     } catch (err) {
-      toast.error(err.message || 'Lỗi xóa sản phẩm');
+      toast.error(err.message || (hardDelete ? 'Lỗi khi xóa vĩnh viễn sản phẩm' : 'Lỗi khi lưu trữ sản phẩm'));
     }
   };
 
@@ -277,7 +285,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
         brand_id: parseInt(newProdBrandId),
         product_name: newProdName.trim(),
         description: newProdDesc.trim(),
-        status: 'active',
+        status: 'draft',
         thumbnail_url: newProdThumb.trim() || newProdImages[0] || newVariantImages[0] || defaultThumb,
         images: newProdImages,
         variants: [{
@@ -285,7 +293,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
           variant_name: newVariantName.trim() || 'Bản Tiêu Chuẩn',
           price: parseFloat(newVariantPrice),
           sale_price: newVariantSalePrice ? parseFloat(newVariantSalePrice) : parseFloat(newVariantPrice),
-          stock: parseInt(newVariantStock) || 20,
+          stock: 0,
           specifications: { 'Bảo hành': '24 tháng', 'Tình trạng': 'Mới 100% fullbox' },
           images: newVariantImages,
         }],
@@ -319,9 +327,34 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
     }
   };
 
+  const handleQuickUpdateStatus = async (productId, targetStatus) => {
+    try {
+      const res = await productApi.updateProduct(productId, { status: targetStatus });
+      if (res.success) {
+        const statusMap = {
+          active: 'Đang kinh doanh',
+          draft: 'Bản nháp',
+          inactive: 'Tạm ngưng bán',
+          archived: 'Lưu trữ',
+        };
+        toast.success(`Đã cập nhật trạng thái sang "${statusMap[targetStatus] || targetStatus}"!`);
+        fetchProducts();
+        return true;
+      }
+    } catch (err) {
+      toast.error(err.message || 'Lỗi cập nhật trạng thái');
+      return false;
+    }
+  };
+
   const handleManageVariants = (productId) => {
     setTargetVariantProductId(productId);
     handleTabChange('variants');
+  };
+
+  const handleGoToInventoryImport = (productOrVariant) => {
+    setTargetImportVariant(productOrVariant);
+    handleTabChange('inventory');
   };
 
   const handleCreateCoupon = async (e) => {
@@ -589,7 +622,21 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
 
           {activeTab === 'stats' && <StatsTab stats={stats} loadingStats={loadingStats} formatPrice={formatPrice} formatDate={formatDate} getOrderStatusText={getOrderStatusText} Icons={Icons} />}
           {activeTab === 'orders' && <OrdersTab orders={orders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} fetchOrders={fetchOrders} handleUpdateStatus={handleUpdateStatus} formatPrice={formatPrice} getOrderStatusText={getOrderStatusText} />}
-          {activeTab === 'products' && <ProductsTab products={products} setShowAddProductModal={setShowAddProductModal} onNavigate={onNavigate} formatPrice={formatPrice} isAdmin={isAdmin} handleDeleteProduct={handleDeleteProduct} onEditProduct={setEditingProduct} onManageVariants={handleManageVariants} Icons={Icons} />}
+          {activeTab === 'products' && (
+            <ProductsTab
+              products={products}
+              setShowAddProductModal={setShowAddProductModal}
+              onNavigate={onNavigate}
+              formatPrice={formatPrice}
+              isAdmin={isAdmin}
+              handleDeleteProduct={handleDeleteProduct}
+              onEditProduct={setEditingProduct}
+              onManageVariants={handleManageVariants}
+              onUpdateStatus={handleQuickUpdateStatus}
+              onGoToInventory={(prod) => handleGoToInventoryImport(prod)}
+              Icons={Icons}
+            />
+          )}
           {activeTab === 'categories' && <CategoriesTab categories={categories} fetchCategories={fetchCategories} isAdmin={isAdmin} Icons={Icons} />}
           {activeTab === 'brands' && <BrandsTab brands={brands} fetchBrands={fetchBrands} isAdmin={isAdmin} Icons={Icons} />}
           {activeTab === 'variants' && <VariantsTab products={products} formatPrice={formatPrice} isAdmin={isAdmin} Icons={Icons} onNavigate={onNavigate} targetProductId={targetVariantProductId} />}
@@ -606,7 +653,13 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
               handleDeleteCoupon={handleDeleteCoupon} Icons={Icons}
             />
           )}
-          {activeTab === 'inventory' && <InventoryTab Icons={Icons} />}
+          {activeTab === 'inventory' && (
+            <InventoryTab
+              Icons={Icons}
+              initialImportTarget={targetImportVariant}
+              onClearImportTarget={() => setTargetImportVariant(null)}
+            />
+          )}
           {activeTab === 'users' && <UsersTab user={user} isAdmin={isAdmin} toast={toast} Icons={Icons} />}
           {activeTab === 'reviews' && <ReviewsTab isAdmin={isAdmin} formatPrice={formatPrice} />}
         </Box>

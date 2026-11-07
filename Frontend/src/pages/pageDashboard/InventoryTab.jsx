@@ -23,6 +23,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
+import Autocomplete from '@mui/material/Autocomplete';
 
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -42,7 +43,7 @@ const TX_BADGES = {
   return: { label: '↩️ Hoàn kho', bg: '#F3E8FF', color: '#7E22CE' },
 };
 
-export default function InventoryTab() {
+export default function InventoryTab({ Icons, initialImportTarget, onClearImportTarget }) {
   const toast = useToast();
   const [activeSubTab, setActiveSubTab] = useState('items');
 
@@ -114,7 +115,7 @@ export default function InventoryTab() {
 
   const fetchAllVariants = useCallback(async () => {
     try {
-      const res = await inventoryApi.getInventory({ limit: 500 });
+      const res = await inventoryApi.getInventory({ limit: 1000, for_import: 'true' });
       if (res.success && res.data?.items) {
         setAllVariants(res.data.items);
       }
@@ -159,20 +160,32 @@ export default function InventoryTab() {
     return allVariants.length ? allVariants : items;
   }, [allVariants, items]);
 
+  // Tự động mở modal nhập kho nếu được chuyển hướng từ Quản lý sản phẩm
+  useEffect(() => {
+    if (initialImportTarget && allVariants.length > 0) {
+      const targetVar =
+        allVariants.find((v) => String(v.variant_id) === String(initialImportTarget.variant_id)) ||
+        allVariants.find((v) => String(v.product_id) === String(initialImportTarget.product_id));
+      if (targetVar) {
+        handleOpenImport(targetVar);
+      }
+      onClearImportTarget && onClearImportTarget();
+    }
+  }, [initialImportTarget, allVariants]);
+
   // === XỬ LÝ NHẬP KHO NHIỀU MẶT HÀNG ===
   const handleOpenImport = (variant = null) => {
     if (variant) {
       setImportItems([{
         variant_id: String(variant.variant_id),
         quantity: '10',
-        unit_cost: String(Math.round(variant.price * 0.75)),
+        unit_cost: variant.price ? String(Math.round(Number(variant.price) * 0.75)) : '100000',
       }]);
     } else {
-      const first = availableVariants[0];
       setImportItems([{
-        variant_id: first ? String(first.variant_id) : '',
+        variant_id: '',
         quantity: '10',
-        unit_cost: first ? String(Math.round(first.price * 0.75)) : '',
+        unit_cost: '',
       }]);
     }
     setImportNote('');
@@ -197,8 +210,8 @@ export default function InventoryTab() {
         const updated = { ...item, [field]: value };
         if (field === 'variant_id') {
           const selectedVar = availableVariants.find((v) => String(v.variant_id) === String(value));
-          if (selectedVar && !item.unit_cost) {
-            updated.unit_cost = String(Math.round(selectedVar.price * 0.75));
+          if (selectedVar) {
+            updated.unit_cost = selectedVar.price ? String(Math.round(Number(selectedVar.price) * 0.75)) : '';
           }
         }
         return updated;
@@ -464,7 +477,17 @@ export default function InventoryTab() {
             {loadingItems ? (
               <Box sx={{ textAlign: 'center', py: 4.5, color: 'text.secondary' }}>Đang tải dữ liệu kho hàng...</Box>
             ) : items.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4.5, color: 'text.secondary' }}>Không tìm thấy mặt hàng nào trong kho phù hợp với bộ lọc</Box>
+              <Box sx={{ textAlign: 'center', py: 6, px: 2 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#1E293B', mb: 0.5 }}>
+                  Chưa có sản phẩm nào được nhập vào kho
+                </Typography>
+                <Typography sx={{ fontSize: 13, color: 'text.secondary', maxWidth: 480, mx: 'auto', mb: 2 }}>
+                  Kho hàng chỉ hiển thị những sản phẩm đã có phiếu nhập kho. Hãy bấm "+ Nhập hàng" để chọn sản phẩm và tạo phiếu nhập đầu tiên.
+                </Typography>
+                <Button variant="contained" color="success" startIcon={<AddIcon />} onClick={() => handleOpenImport()}>
+                  + Lập phiếu nhập kho ngay
+                </Button>
+              </Box>
             ) : (
               <Table size="small">
                 <TableHead>
@@ -493,7 +516,16 @@ export default function InventoryTab() {
                               sx={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 1.5, border: '1px solid #E5E7EB', bgcolor: '#FFF' }}
                             />
                             <Box>
-                              <Typography sx={{ fontWeight: 800, fontSize: 13.5 }}>{it.product_name}</Typography>
+                              <Stack direction="row" alignItems="center" spacing={0.75}>
+                                <Typography sx={{ fontWeight: 800, fontSize: 13.5 }}>{it.product_name}</Typography>
+                                {it.product_status === 'draft' && (
+                                  <Chip
+                                    label="Bản nháp"
+                                    size="small"
+                                    sx={{ bgcolor: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE', fontWeight: 700, fontSize: 10.5, height: 20 }}
+                                  />
+                                )}
+                              </Stack>
                               <Typography sx={{ fontSize: 12, color: 'primary.main', fontWeight: 700 }}>Phiên bản: {it.variant_name}</Typography>
                             </Box>
                           </Stack>
@@ -690,23 +722,51 @@ export default function InventoryTab() {
 
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr' }, gap: 1.5 }}>
                         <Box>
-                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể *</Typography>
-                          <Select
-                            fullWidth
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>
+                            Chọn mặt hàng / biến thể cần nhập *
+                          </Typography>
+                          <Autocomplete
                             size="small"
-                            required
-                            displayEmpty
-                            value={item.variant_id}
-                            onChange={(e) => handleUpdateImportRow(idx, 'variant_id', e.target.value)}
-                            sx={{ bgcolor: '#FFF', fontSize: 13 }}
-                          >
-                            <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
-                            {availableVariants.map((it) => (
-                              <MenuItem key={it.variant_id} value={String(it.variant_id)}>
-                                {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn: {it.stock})
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            options={availableVariants}
+                            getOptionLabel={(option) => {
+                              if (!option) return '';
+                              const draftTag = option.product_status === 'draft' ? '📝 [Bản nháp] ' : '';
+                              return `${draftTag}${option.product_name} - ${option.variant_name} (SKU: ${option.sku} - Tồn: ${option.stock})`;
+                            }}
+                            isOptionEqualToValue={(option, val) =>
+                              String(option?.variant_id) === String(val?.variant_id)
+                            }
+                            value={selectedVar || null}
+                            onChange={(_, newVal) => {
+                              handleUpdateImportRow(idx, 'variant_id', newVal ? String(newVal.variant_id) : '');
+                            }}
+                            noOptionsText="Không tìm thấy sản phẩm nào"
+                            renderOption={(props, option) => (
+                              <Box component="li" {...props} key={option.variant_id} sx={{ py: 0.75, borderBottom: '1px solid #F1F5F9' }}>
+                                <Stack spacing={0.25} sx={{ width: '100%' }}>
+                                  <Stack direction="row" alignItems="center" spacing={1}>
+                                    <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                                      {option.product_name}
+                                    </Typography>
+                                    {option.product_status === 'draft' && (
+                                      <Chip label="Bản nháp" size="small" sx={{ height: 18, fontSize: 10, bgcolor: '#EFF6FF', color: '#2563EB', fontWeight: 700 }} />
+                                    )}
+                                  </Stack>
+                                  <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>
+                                    Phiên bản: <strong>{option.variant_name}</strong> • SKU: <Box component="span" sx={{ fontFamily: 'monospace' }}>{option.sku}</Box> • Tồn hiện tại: <strong>{option.stock}</strong> chiếc
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                            )}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                required={!item.variant_id}
+                                placeholder="Gõ tên sản phẩm, biến thể hoặc SKU để tìm kiếm..."
+                                sx={{ bgcolor: '#FFF' }}
+                              />
+                            )}
+                          />
                         </Box>
 
                         <Box>
@@ -908,23 +968,45 @@ export default function InventoryTab() {
 
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr' }, gap: 1.5 }}>
                         <Box>
-                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>Chọn mặt hàng / biến thể cần xuất *</Typography>
-                          <Select
-                            fullWidth
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, mb: 0.5 }}>
+                            Chọn mặt hàng / biến thể cần xuất *
+                          </Typography>
+                          <Autocomplete
                             size="small"
-                            required
-                            displayEmpty
-                            value={item.variant_id}
-                            onChange={(e) => handleUpdateExportRow(idx, 'variant_id', e.target.value)}
-                            sx={{ bgcolor: '#FFF', fontSize: 13 }}
-                          >
-                            <MenuItem value="">-- Chọn biến thể sản phẩm --</MenuItem>
-                            {availableVariants.map((it) => (
-                              <MenuItem key={it.variant_id} value={String(it.variant_id)} disabled={it.stock === 0}>
-                                {it.product_name} - {it.variant_name} (SKU: {it.sku} - Tồn: {it.stock}) {it.stock === 0 ? '(Hết hàng)' : ''}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            options={availableVariants.filter((v) => v.stock > 0)}
+                            getOptionLabel={(option) => {
+                              if (!option) return '';
+                              return `${option.product_name} - ${option.variant_name} (SKU: ${option.sku} - Tồn: ${option.stock})`;
+                            }}
+                            isOptionEqualToValue={(option, val) =>
+                              String(option?.variant_id) === String(val?.variant_id)
+                            }
+                            value={selectedVar || null}
+                            onChange={(_, newVal) => {
+                              handleUpdateExportRow(idx, 'variant_id', newVal ? String(newVal.variant_id) : '');
+                            }}
+                            noOptionsText="Không có mặt hàng nào còn hàng trong kho"
+                            renderOption={(props, option) => (
+                              <Box component="li" {...props} key={option.variant_id} sx={{ py: 0.75, borderBottom: '1px solid #F1F5F9' }}>
+                                <Stack spacing={0.25} sx={{ width: '100%' }}>
+                                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                                    {option.product_name}
+                                  </Typography>
+                                  <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>
+                                    Phiên bản: <strong>{option.variant_name}</strong> • SKU: <Box component="span" sx={{ fontFamily: 'monospace' }}>{option.sku}</Box> • Tồn kho: <strong style={{ color: '#16A34A' }}>{option.stock}</strong> chiếc
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                            )}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                required={!item.variant_id}
+                                placeholder="Gõ tên sản phẩm, biến thể hoặc SKU cần xuất..."
+                                sx={{ bgcolor: '#FFF' }}
+                              />
+                            )}
+                          />
                         </Box>
 
                         <Box>

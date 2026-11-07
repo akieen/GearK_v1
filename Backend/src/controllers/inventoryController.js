@@ -11,34 +11,58 @@ async function getInventory(req, res, next) {
       category_id,
       low_stock,
       sort = 'newest',
+      for_import,
+      all_products,
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+    const limitNum = Math.max(1, Math.min(1000, parseInt(limit, 10)));
     const offset = (pageNum - 1) * limitNum;
 
-    const whereConditions = {
-      product: {
-        status: { not: 'archived' },
+    const isForImport = for_import === 'true' || all_products === 'true';
+
+    const andConditions = [
+      {
+        product: {
+          status: { not: 'archived' },
+        },
       },
-    };
+    ];
+
+    // Ở kho thì phải nhập trước rồi mới load ra: chỉ load các mặt hàng đã có giao dịch kho hoặc tồn kho > 0
+    if (!isForImport) {
+      andConditions.push({
+        OR: [
+          { stock: { gt: 0 } },
+          { inventory_transactions: { some: {} } },
+        ],
+      });
+    }
 
     if (search && search.trim() !== '') {
       const keyword = search.trim();
-      whereConditions.OR = [
-        { product: { product_name: { contains: keyword } } },
-        { sku: { contains: keyword } },
-        { variant_name: { contains: keyword } },
-      ];
+      andConditions.push({
+        OR: [
+          { product: { product_name: { contains: keyword } } },
+          { sku: { contains: keyword } },
+          { variant_name: { contains: keyword } },
+        ],
+      });
     }
 
     if (category_id) {
-      whereConditions.product.category_id = BigInt(category_id);
+      andConditions.push({
+        product: { category_id: BigInt(category_id) },
+      });
     }
 
     if (low_stock === 'true') {
-      whereConditions.stock = { lte: 5 };
+      andConditions.push({
+        stock: { lte: 5 },
+      });
     }
+
+    const whereConditions = { AND: andConditions };
 
     // Sorting
     let orderBy = [{ variant_id: 'desc' }];
@@ -52,6 +76,14 @@ async function getInventory(req, res, next) {
         { variant_name: 'asc' },
       ];
     }
+
+    const baseStockedFilter = {
+      product: { status: { not: 'archived' } },
+      OR: [
+        { stock: { gt: 0 } },
+        { inventory_transactions: { some: {} } },
+      ],
+    };
 
     const [total, variants, statsResult, importCount, exportCount] = await Promise.all([
       prisma.productVariant.count({ where: whereConditions }),
@@ -74,7 +106,7 @@ async function getInventory(req, res, next) {
       }),
       // Summary stats
       prisma.productVariant.aggregate({
-        where: { product: { status: { not: 'archived' } } },
+        where: baseStockedFilter,
         _count: { variant_id: true },
         _sum: { stock: true },
       }),
@@ -84,10 +116,16 @@ async function getInventory(req, res, next) {
 
     const [lowStockCount, outOfStockCount] = await Promise.all([
       prisma.productVariant.count({
-        where: { product: { status: { not: 'archived' } }, stock: { lte: 5 } },
+        where: {
+          ...baseStockedFilter,
+          stock: { lte: 5, gt: 0 },
+        },
       }),
       prisma.productVariant.count({
-        where: { product: { status: { not: 'archived' } }, stock: 0 },
+        where: {
+          ...baseStockedFilter,
+          stock: 0,
+        },
       }),
     ]);
 

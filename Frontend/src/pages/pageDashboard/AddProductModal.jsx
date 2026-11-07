@@ -11,10 +11,12 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import Chip from '@mui/material/Chip';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 
 import ImageUploadField from '../../components/common/ImageUploadField';
 import { generateSku } from '../../utils/formatters';
@@ -46,8 +48,8 @@ export default function AddProductModal({
   setNewVariantPrice,
   newVariantSalePrice,
   setNewVariantSalePrice,
-  newVariantStock,
-  setNewVariantStock,
+  newVariantStock = '0',
+  setNewVariantStock = () => {},
   newVariantImages = [],
   setNewVariantImages = () => {},
   Icons,
@@ -61,21 +63,21 @@ export default function AddProductModal({
   }, [newProdName, newVariantName, skuTouched, setNewVariantSku]);
 
   const handleRegenerateSku = () => {
-    setNewVariantSku(generateSku(newProdName, newVariantName));
     setSkuTouched(false);
+    setNewVariantSku(generateSku(newProdName, newVariantName));
   };
 
   return (
-    <Dialog open={Boolean(showAddProductModal)} onClose={() => setShowAddProductModal(false)} maxWidth="md" fullWidth>
+    <Dialog open={showAddProductModal} onClose={() => setShowAddProductModal(false)} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 2 }}>
         <Stack direction="row" alignItems="center" spacing={1.25}>
-          <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: 'primary.light', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: '#FEF2F2', color: '#E30019', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <AddIcon />
           </Box>
           <Box>
-            <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Thêm sản phẩm Gaming Gear mới</Typography>
+            <Typography sx={{ fontSize: 16, fontWeight: 800 }}>Thêm sản phẩm mới vào hệ thống</Typography>
             <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-              Hỗ trợ tải lên ảnh tệp qua thư viện Multer & danh sách ảnh theo biến thể
+              Sản phẩm sẽ được tạo mặc định ở trạng thái Bản nháp (draft) và tồn kho = 0
             </Typography>
           </Box>
         </Stack>
@@ -84,6 +86,26 @@ export default function AddProductModal({
 
       <Box component="form" onSubmit={handleCreateProduct}>
         <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Thông báo trạng thái khởi tạo */}
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#2563EB' }} />
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1E40AF' }}>
+                  Trạng thái khởi tạo: Bản nháp (draft)
+                </Typography>
+              </Stack>
+              <Chip
+                label="Bản nháp (draft)"
+                size="small"
+                sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8', fontWeight: 700, fontSize: 11, height: 22 }}
+              />
+            </Stack>
+            <Typography sx={{ fontSize: 12, color: '#3B82F6', mt: 0.5 }}>
+              Sản phẩm mới thêm sẽ ở trạng thái Bản nháp để bạn kiểm tra thông tin và tạo phiếu nhập kho trước khi mở bán công khai.
+            </Typography>
+          </Box>
+
           <Box>
             <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Tên sản phẩm *</Typography>
             <TextField
@@ -179,8 +201,25 @@ export default function AddProductModal({
               </Box>
 
               <Box sx={{ gridColumn: 'span 2' }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Số lượng tồn kho</Typography>
-                <TextField fullWidth size="small" type="number" value={newVariantStock} onChange={(e) => setNewVariantStock(e.target.value)} />
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                  <Inventory2OutlinedIcon sx={{ fontSize: 16, color: '#64748B' }} />
+                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                    Số lượng tồn kho ban đầu (Khởi tạo = 0)
+                  </Typography>
+                </Stack>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  value={0}
+                  disabled
+                  helperText="Tồn kho khởi tạo mặc định là 0. Để tăng tồn kho, vui lòng tạo Phiếu Nhập Kho tại Quản lý tồn kho."
+                  sx={{
+                    bgcolor: '#F1F5F9',
+                    '& input': { fontWeight: 700, color: '#334155' },
+                    '& .MuiFormHelperText-root': { color: '#64748B', fontSize: 11.5, mt: 0.5 }
+                  }}
+                />
               </Box>
             </Box>
 
@@ -199,7 +238,7 @@ export default function AddProductModal({
         <DialogActions sx={{ p: 2 }}>
           <Button variant="outlined" color="inherit" onClick={() => setShowAddProductModal(false)}>Hủy</Button>
           <Button type="submit" variant="contained" disabled={submittingProduct}>
-            {submittingProduct ? 'Đang lưu sản phẩm...' : 'Lưu sản phẩm'}
+            {submittingProduct ? 'Đang lưu sản phẩm...' : 'Lưu sản phẩm (Bản nháp)'}
           </Button>
         </DialogActions>
       </Box>

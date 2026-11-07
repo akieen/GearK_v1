@@ -74,6 +74,8 @@ export default function ProductDetailModal({
     switch (status) {
       case 'active':
         return { label: 'Đang kinh doanh', bg: '#ECFDF5', color: '#059669' };
+      case 'draft':
+        return { label: 'Bản nháp', bg: '#EFF6FF', color: '#2563EB' };
       case 'inactive':
         return { label: 'Tạm ngưng bán', bg: '#FFFBEB', color: '#D97706' };
       case 'archived':

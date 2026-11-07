@@ -285,7 +285,7 @@ async function createProduct(req, res, next) {
       brand_id,
       description,
       thumbnail_url,
-      status = 'active',
+      status = 'draft',
       variants = [],
       images = [],
     } = req.body;
@@ -328,7 +328,7 @@ async function createProduct(req, res, next) {
               specifications: specs,
               price: Number(v.price) || 0,
               sale_price: v.sale_price !== undefined && v.sale_price !== null ? Number(v.sale_price) : null,
-              stock: parseInt(v.stock, 10) || 0,
+              stock: 0, // Tồn kho ban đầu luôn là 0, chỉ tăng khi tạo phiếu nhập kho
               warranty_months: parseInt(v.warranty_months, 10) || 12,
             },
           });
@@ -469,16 +469,94 @@ async function deleteProduct(req, res, next) {
 
     const existing = await prisma.product.findUnique({
       where: { product_id: productId },
+      include: {
+        variants: {
+          select: { variant_id: true, stock: true },
+        },
+      },
     });
     if (!existing) {
       return errorResponse(res, 'Sản phẩm không tồn tại', 404);
     }
 
     if (hardDelete === 'true') {
-      await prisma.product.delete({
-        where: { product_id: productId },
+      const variantIds = existing.variants.map((v) => v.variant_id);
+
+      if (variantIds.length > 0) {
+        // 1. Kiểm tra đơn hàng khách đặt (order_items)
+        const orderItemCount = await prisma.orderItem.count({
+          where: { variant_id: { in: variantIds } },
+        });
+        if (orderItemCount > 0) {
+          return errorResponse(
+            res,
+            `Không thể xóa vĩnh viễn: Sản phẩm đã có trong ${orderItemCount} mục đơn hàng của khách hàng. Hãy chuyển sang trạng thái "Lưu trữ" (archived) để bảo toàn lịch sử bán hàng.`,
+            400
+          );
+        }
+
+        // 2. Kiểm tra phiếu nhập kho (purchase_order_items - ràng buộc RESTRICT)
+        const poItemCount = await prisma.purchaseOrderItem.count({
+          where: { variant_id: { in: variantIds } },
+        });
+        if (poItemCount > 0) {
+          return errorResponse(
+            res,
+            `Không thể xóa vĩnh viễn: Sản phẩm đã có trong ${poItemCount} mục phiếu nhập kho (ràng buộc khóa ngoại). Hãy chuyển sang trạng thái "Lưu trữ" (archived).`,
+            400
+          );
+        }
+      }
+
+      // 3. Kiểm tra số lượng tồn kho còn lại
+      const totalStock = existing.variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+      if (totalStock > 0) {
+        return errorResponse(
+          res,
+          `Không thể xóa vĩnh viễn: Sản phẩm vẫn còn tồn kho (${totalStock} sản phẩm). Vui lòng xuất kho hoặc chuyển sang "Lưu trữ".`,
+          400
+        );
+      }
+
+      // Xóa trong transaction an toàn
+      await prisma.$transaction(async (tx) => {
+        if (variantIds.length > 0) {
+          // Xóa giỏ hàng & danh sách yêu thích
+          await tx.cartItem.deleteMany({
+            where: { variant_id: { in: variantIds } },
+          });
+          await tx.wishlistItem.deleteMany({
+            where: { variant_id: { in: variantIds } },
+          });
+          // Xóa lịch sử giao dịch kho
+          await tx.inventoryTransaction.deleteMany({
+            where: { variant_id: { in: variantIds } },
+          });
+          // Xóa ảnh của các biến thể
+          await tx.variantImage.deleteMany({
+            where: { variant_id: { in: variantIds } },
+          });
+          // Xóa các biến thể
+          await tx.productVariant.deleteMany({
+            where: { product_id: productId },
+          });
+        }
+
+        // Xóa ảnh sản phẩm & đánh giá
+        await tx.productImage.deleteMany({
+          where: { product_id: productId },
+        });
+        await tx.review.deleteMany({
+          where: { product_id: productId },
+        });
+
+        // Xóa sản phẩm
+        await tx.product.delete({
+          where: { product_id: productId },
+        });
       });
-      return successResponse(res, null, 'Đã xóa vĩnh viễn sản phẩm');
+
+      return successResponse(res, null, 'Đã xóa vĩnh viễn sản phẩm thành công');
     }
 
     // Soft delete / archive
@@ -488,6 +566,13 @@ async function deleteProduct(req, res, next) {
     });
     return successResponse(res, null, 'Đã chuyển sản phẩm vào kho lưu trữ (archived)');
   } catch (error) {
+    if (error.code === 'P2003') {
+      return errorResponse(
+        res,
+        'Không thể xóa vĩnh viễn sản phẩm do có ràng buộc khóa ngoại với bảng dữ liệu khác trong cơ sở dữ liệu.',
+        400
+      );
+    }
     next(error);
   }
 }

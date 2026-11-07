@@ -55,8 +55,8 @@ export const productApi = {
       body: data instanceof FormData ? data : JSON.stringify(data),
     }),
 
-  deleteProduct: (id) =>
-    request(`/products/${id}`, {
+  deleteProduct: (id, hardDelete = false) =>
+    request(`/products/${id}${hardDelete ? '?hardDelete=true' : ''}`, {
       method: 'DELETE',
     }),
 
