@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { sendOtpMail } = require('../services/mailService');
+const { saveRegistrationOtp, verifyOtp, getOtpRecord, generateOtpCode } = require('../services/otpService');
 
 function generateToken(userId, role) {
   return jwt.sign(
@@ -11,7 +13,7 @@ function generateToken(userId, role) {
   );
 }
 
-// [POST] /api/auth/register
+// [POST] /api/auth/register (Gửi OTP về email)
 async function register(req, res, next) {
   try {
     const { full_name, email, password, role = 'customer' } = req.body;
@@ -38,27 +40,85 @@ async function register(req, res, next) {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    // Only allow customer role on public registration (admin can create staff/admin)
+    // Chỉ cho phép customer role khi tự đăng ký qua portal công khai
     const assignedRole = role === 'admin' ? 'customer' : role;
 
+    // Lưu thông tin đăng ký và sinh OTP (hiệu lực 10 phút)
+    const { otp, expiresAt } = saveRegistrationOtp({
+      email: cleanEmail,
+      full_name: full_name.trim(),
+      password_hash,
+      role: assignedRole,
+    });
+
+    // Gửi mail OTP bất đồng bộ
+    sendOtpMail({
+      to: cleanEmail,
+      fullName: full_name.trim(),
+      otpCode: otp,
+      expiresInMinutes: 10,
+    }).catch((err) => {
+      console.error('[Register Error] Gửi mail OTP thất bại:', err.message);
+    });
+
+    return successResponse(
+      res,
+      {
+        email: cleanEmail,
+        requires_otp: true,
+        expires_at: expiresAt,
+      },
+      'Mã OTP xác thực đã được gửi đến email của bạn. Vui lòng kiểm tra hòm thư!',
+      200
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [POST] /api/auth/verify-otp (Xác thực OTP và tạo tài khoản chính thức)
+async function verifyOtpAndRegister(req, res, next) {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return errorResponse(res, 'Vui lòng cung cấp email và mã OTP', 400);
+    }
+
+    const verification = verifyOtp(email, otp);
+    if (!verification.valid) {
+      return errorResponse(res, verification.message, 400);
+    }
+
+    const { full_name, password_hash, role } = verification.data;
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Kiểm tra lại đề phòng trùng lặp trong lúc đợi xác thực
+    const existing = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+    if (existing) {
+      return errorResponse(res, 'Email này đã được đăng ký trước đó', 409);
+    }
+
+    // Tạo user và các bảng phụ thuộc trong database transaction
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          full_name: full_name.trim(),
+          full_name,
           email: cleanEmail,
           password_hash,
-          role: assignedRole,
+          role,
         },
       });
 
-      // Automatically initialize cart and wishlist for user
       await tx.cart.create({ data: { user_id: user.user_id } });
       await tx.wishlist.create({ data: { user_id: user.user_id } });
 
       return user;
     });
 
-    const token = generateToken(newUser.user_id, assignedRole);
+    const token = generateToken(newUser.user_id, role);
 
     return successResponse(
       res,
@@ -67,12 +127,55 @@ async function register(req, res, next) {
           user_id: newUser.user_id,
           full_name: newUser.full_name,
           email: newUser.email,
-          role: assignedRole,
+          role,
         },
         token,
       },
-      'Đăng ký tài khoản thành công',
+      'Xác thực OTP và tạo tài khoản thành công!',
       201
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+// [POST] /api/auth/resend-otp (Gửi lại mã OTP mới)
+async function resendOtp(req, res, next) {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return errorResponse(res, 'Vui lòng cung cấp địa chỉ email', 400);
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const record = getOtpRecord(cleanEmail);
+
+    if (!record) {
+      return errorResponse(res, 'Không tìm thấy phiên đăng ký cho email này. Vui lòng đăng ký lại', 404);
+    }
+
+    // Sinh mã mới và cập nhật
+    const newOtp = generateOtpCode();
+    record.otp = newOtp;
+    record.expiresAt = Date.now() + 10 * 60 * 1000;
+
+    sendOtpMail({
+      to: cleanEmail,
+      fullName: record.full_name,
+      otpCode: newOtp,
+      expiresInMinutes: 10,
+    }).catch((err) => {
+      console.error('[Resend OTP Error] Gửi mail OTP thất bại:', err.message);
+    });
+
+    return successResponse(
+      res,
+      {
+        email: cleanEmail,
+        expires_at: record.expiresAt,
+      },
+      'Đã gửi lại mã OTP mới đến email của bạn!',
+      200
     );
   } catch (error) {
     next(error);
@@ -412,6 +515,8 @@ async function deleteUser(req, res, next) {
 
 module.exports = {
   register,
+  verifyOtpAndRegister,
+  resendOtp,
   login,
   getProfile,
   updateProfile,

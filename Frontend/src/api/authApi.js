@@ -13,6 +13,18 @@ export const authApi = {
       body: JSON.stringify({ full_name, email, password }),
     }),
 
+  verifyOtp: (email, otp) =>
+    request('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    }),
+
+  resendOtp: (email) =>
+    request('/auth/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
   getProfile: () => request('/auth/profile'),
 
   updateProfile: (data) =>

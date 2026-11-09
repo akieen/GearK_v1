@@ -62,13 +62,46 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await authApi.register(full_name, email, password);
       if (res.success) {
-        toast.success('Đăng ký tài khoản thành công! Vui lòng đăng nhập.');
-        setAuthModalMode('login');
-        return { success: true };
+        toast.info(res.message || 'Mã OTP đã được gửi về email. Vui lòng kiểm tra và nhập mã xác thực!');
+        return { success: true, requires_otp: true, email: res.data?.email || email };
       }
       return { success: false, message: res.message };
     } catch (err) {
       toast.error(err.message || 'Đăng ký không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const verifyOtp = async (email, otp) => {
+    try {
+      const res = await authApi.verifyOtp(email, otp);
+      if (res.success && res.data) {
+        const { user: userData, token: userToken } = res.data;
+        setUser(userData);
+        setToken(userToken);
+        localStorage.setItem('geark_token', userToken);
+        localStorage.setItem('geark_user', JSON.stringify(userData));
+        toast.success(`Chúc mừng ${userData.full_name}, tài khoản đã được kích hoạt thành công!`);
+        setAuthModalOpen(false);
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Xác thực OTP không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const resendOtp = async (email) => {
+    try {
+      const res = await authApi.resendOtp(email);
+      if (res.success) {
+        toast.success('Đã gửi lại mã OTP mới đến email của bạn!');
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Gửi lại OTP không thành công');
       return { success: false, message: err.message };
     }
   };
@@ -116,6 +149,8 @@ export const AuthProvider = ({ children }) => {
         isCustomer,
         login,
         register,
+        verifyOtp,
+        resendOtp,
         logout,
         quickLogin,
         authModalOpen,

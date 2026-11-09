@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { generateOrderCode, successResponse, errorResponse } = require('../utils/helpers');
+const { sendOrderSuccessMail } = require('../services/mailService');
 
 // Core order creation logic reusable by createOrder and VNPay payment callback
 async function executeOrderCreation(tx, {
@@ -114,6 +115,7 @@ async function executeOrderCreation(tx, {
       quantity,
       line_total: lineTotal,
       current_stock: variant.stock,
+      warranty_months: variant.warranty_months || 0,
     });
   }
 
@@ -262,6 +264,18 @@ async function executeOrderCreation(tx, {
     discount_amount: discountAmount,
     order_status: finalOrderStatus,
     payment_status,
+    recipient_name: recipient_name || null,
+    recipient_phone: recipient_phone || null,
+    street_address: street_address || null,
+    payment_method,
+    items: itemsToInsert.map((item) => ({
+      product_name: item.product_name,
+      variant_name: item.variant_name,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      line_total: item.line_total,
+      warranty_months: item.warranty_months,
+    })),
   };
 }
 
@@ -281,6 +295,29 @@ async function createOrder(req, res, next) {
         payment_status: 'unpaid',
       });
     });
+
+    // Lấy email người dùng để gửi mail xác nhận đơn hàng thành công
+    const user = await prisma.user.findUnique({
+      where: { user_id: BigInt(req.user.user_id) },
+      select: { email: true, full_name: true },
+    });
+
+    if (user?.email) {
+      sendOrderSuccessMail({
+        to: user.email,
+        recipientName: orderData.recipient_name || user.full_name,
+        orderCode: orderData.order_code,
+        totalAmount: orderData.total_amount,
+        discountAmount: orderData.discount_amount,
+        paymentMethod: orderData.payment_method,
+        paymentStatus: orderData.payment_status,
+        shippingAddress: orderData.street_address,
+        recipientPhone: orderData.recipient_phone,
+        items: orderData.items,
+      }).catch((err) => {
+        console.error('[Mail Error] Gửi mail xác nhận đơn hàng thất bại:', err.message);
+      });
+    }
 
     return successResponse(res, orderData, 'Đặt hàng thành công', 201);
   } catch (error) {

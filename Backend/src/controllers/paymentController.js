@@ -5,6 +5,7 @@ const querystring = require('qs');
 const prisma = require('../config/prisma');
 const { executeOrderCreation } = require('./orderController');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { sendOrderSuccessMail } = require('../services/mailService');
 
 function sortObject(obj) {
   const sorted = {};
@@ -274,6 +275,29 @@ const vnpayReturn = async (req, res, next) => {
 
           return ord;
         });
+
+        // Gửi email xác nhận đơn hàng khi thanh toán VNPay thành công
+        const user = await prisma.user.findUnique({
+          where: { user_id: tx.user_id },
+          select: { email: true, full_name: true },
+        });
+
+        if (user?.email) {
+          sendOrderSuccessMail({
+            to: user.email,
+            recipientName: createdOrder.recipient_name || user.full_name,
+            orderCode: createdOrder.order_code,
+            totalAmount: createdOrder.total_amount,
+            discountAmount: createdOrder.discount_amount,
+            paymentMethod: 'VNPay',
+            paymentStatus: 'paid',
+            shippingAddress: createdOrder.street_address || orderData.street_address,
+            recipientPhone: createdOrder.recipient_phone || orderData.recipient_phone,
+            items: createdOrder.items,
+          }).catch((err) => {
+            console.error('[VNPay Mail Error] Gửi mail xác nhận đơn hàng thất bại:', err.message);
+          });
+        }
 
         if (req.headers.accept?.includes('application/json')) {
           return res.status(200).json({
