@@ -192,7 +192,7 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '5fr 7fr' },
+            gridTemplateColumns: { xs: '1fr', md: '1.4fr 0.8fr' },
             gap: 3.5,
             mb: 4,
           }}
