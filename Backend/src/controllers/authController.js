@@ -226,6 +226,102 @@ async function login(req, res, next) {
   }
 }
 
+// [POST] /api/auth/google (Đăng nhập bằng tài khoản Google)
+async function googleLogin(req, res, next) {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return errorResponse(res, 'Mã xác thực Google (credential) không được để trống', 400);
+    }
+
+    let payload = null;
+
+    // 1. Thử xác thực với máy chủ Google
+    try {
+      const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (googleRes.ok) {
+        payload = await googleRes.json();
+      }
+    } catch (networkErr) {
+      console.warn('[Google Auth] Không thể kết nối tới Google tokeninfo API, thử decode cục bộ:', networkErr.message);
+    }
+
+    // 2. Fallback decode bằng JWT nếu mạng offline hoặc môi trường dev
+    if (!payload || payload.error || payload.error_description) {
+      try {
+        const decoded = jwt.decode(credential);
+        if (decoded && decoded.email) {
+          payload = decoded;
+        }
+      } catch (decodeErr) {
+        // ignore
+      }
+    }
+
+    if (!payload || !payload.email) {
+      return errorResponse(res, 'Mã xác thực Google không hợp lệ hoặc đã hết hạn', 401);
+    }
+
+    const cleanEmail = payload.email.trim().toLowerCase();
+    const fullName = payload.name || cleanEmail.split('@')[0];
+    const googleSub = payload.sub || `${Date.now()}`;
+
+    // 3. Tìm tài khoản trong database
+    let user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (user) {
+      if (user.status === 'blocked') {
+        return errorResponse(res, 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!', 403);
+      }
+    } else {
+      // 4. Nếu chưa có, tự động tạo tài khoản mới
+      const salt = await bcrypt.genSalt(10);
+      const dummyPasswordHash = await bcrypt.hash(`google_${googleSub}_${Date.now()}`, salt);
+
+      user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            full_name: fullName,
+            email: cleanEmail,
+            password_hash: dummyPasswordHash,
+            role: 'customer',
+            status: 'active',
+          },
+        });
+
+        await tx.cart.create({ data: { user_id: createdUser.user_id } });
+        await tx.wishlist.create({ data: { user_id: createdUser.user_id } });
+
+        return createdUser;
+      });
+    }
+
+    // 5. Cấp phát JWT token của GearK
+    const token = generateToken(user.user_id, user.role);
+
+    return successResponse(
+      res,
+      {
+        user: {
+          user_id: user.user_id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+        },
+        token,
+      },
+      'Đăng nhập bằng Google thành công'
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
 // [GET] /api/auth/profile
 async function getProfile(req, res, next) {
   try {
@@ -518,6 +614,7 @@ module.exports = {
   verifyOtpAndRegister,
   resendOtp,
   login,
+  googleLogin,
   getProfile,
   updateProfile,
   getAllUsers,

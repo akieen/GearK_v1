@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { AppDialog } from '../ui/AppDialog';
 import { AppInput } from '../ui/AppInput';
 import { AppButton } from '../ui/AppButton';
+import GoogleLoginButton from './GoogleLoginButton';
 
 const QUICK_ROLES = [
   { role: 'customer', label: 'Khách hàng', variant: 'soft' },
@@ -30,6 +31,7 @@ export const AuthModal = () => {
     setAuthModalMode,
     closeAuthModal,
     login,
+    loginWithGoogle,
     register,
     verifyOtp,
     resendOtp,
@@ -118,6 +120,15 @@ export const AuthModal = () => {
     setSubmitting(true);
     try {
       await quickLogin(role);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credential) => {
+    setSubmitting(true);
+    try {
+      await loginWithGoogle(credential);
     } finally {
       setSubmitting(false);
     }
@@ -265,6 +276,19 @@ export const AuthModal = () => {
           <AppButton type="submit" variant="primary" fullWidth size="large" loading={submitting} glow>
             {isLogin ? 'Đăng nhập ngay' : 'Gửi mã OTP xác thực'}
           </AppButton>
+        </Box>
+      )}
+
+      {/* ĐĂNG NHẬP BẰNG GOOGLE */}
+      {step === 'input' && (
+        <Box sx={{ mt: 2 }}>
+          <Divider sx={{ mb: 1.5 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, px: 1 }}>
+              HOẶC
+            </Typography>
+          </Divider>
+
+          <GoogleLoginButton onGoogleSuccess={handleGoogleSuccess} disabled={submitting} />
         </Box>
       )}
 

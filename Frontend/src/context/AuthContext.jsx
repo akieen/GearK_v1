@@ -58,6 +58,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithGoogle = async (credential) => {
+    try {
+      const res = await authApi.googleLogin(credential);
+      if (res.success && res.data) {
+        const { user: userData, token: userToken } = res.data;
+        setUser(userData);
+        setToken(userToken);
+        localStorage.setItem('geark_token', userToken);
+        localStorage.setItem('geark_user', JSON.stringify(userData));
+        toast.success(`Chào mừng ${userData.full_name} đã đăng nhập qua Google!`);
+        setAuthModalOpen(false);
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Đăng nhập Google không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
   const register = async (full_name, email, password) => {
     try {
       const res = await authApi.register(full_name, email, password);
@@ -148,6 +168,7 @@ export const AuthProvider = ({ children }) => {
         isStaff,
         isCustomer,
         login,
+        loginWithGoogle,
         register,
         verifyOtp,
         resendOtp,

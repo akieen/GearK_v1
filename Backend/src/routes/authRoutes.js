@@ -7,6 +7,7 @@ router.post('/register', authController.register);
 router.post('/verify-otp', authController.verifyOtpAndRegister);
 router.post('/resend-otp', authController.resendOtp);
 router.post('/login', authController.login);
+router.post('/google', authController.googleLogin);
 router.get('/profile', verifyToken, authController.getProfile);
 router.put('/profile', verifyToken, authController.updateProfile);
 
