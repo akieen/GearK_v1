@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
-import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -33,32 +32,31 @@ export const CartPage = ({ onNavigate }) => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
+  // Tính tổng tiền các sản phẩm
   const itemsSubtotal = (cart.items || []).reduce((sum, item) => {
     const itemPrice = parseFloat(item.sale_price ?? item.price ?? 0);
     return sum + itemPrice * (Number(item.quantity) || 1);
   }, 0);
 
-  const subtotal = (cartTotal && cartTotal > 0)
-    ? cartTotal
-    : (Number(cart.total_amount ?? cart.subtotal) || itemsSubtotal);
+  const subtotal = cartTotal && cartTotal > 0 ? cartTotal : Number(cart.total_amount ?? cart.subtotal) || itemsSubtotal;
 
+  // Xử lý áp dụng mã giảm giá
   const handleApplyCoupon = async (e) => {
     e.preventDefault();
     if (!couponCode.trim()) {
-      toast.warning('Vui lòng nhập mã giảm giá!');
-      return;
+      return toast.warning('Vui lòng nhập mã giảm giá!');
     }
     setValidatingCoupon(true);
     try {
       const res = await couponApi.validateCoupon(couponCode.trim(), subtotal);
-      if (res.success && res.data) {
+      if (res?.success && res.data) {
         setAppliedCoupon(res.data);
         toast.success(`Áp dụng mã ${couponCode.toUpperCase()} thành công!`);
       } else {
-        toast.error(res.message || 'Mã giảm giá không hợp lệ');
+        toast.error(res?.message || 'Mã giảm giá không hợp lệ');
       }
     } catch (err) {
-      toast.error(err.message || 'Mã giảm giá không tồn tại hoặc đã hết hạn');
+      toast.error(err?.message || 'Mã giảm giá không tồn tại hoặc đã hết hạn');
     } finally {
       setValidatingCoupon(false);
     }
@@ -67,6 +65,7 @@ export const CartPage = ({ onNavigate }) => {
   const discountAmount = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
   const finalTotal = Math.max(0, subtotal - discountAmount);
 
+  // Giao diện khi giỏ hàng trống
   if (!cart.items || cart.items.length === 0) {
     return (
       <Container maxWidth="md" sx={{ py: 8 }}>
@@ -84,7 +83,7 @@ export const CartPage = ({ onNavigate }) => {
   return (
     <Box sx={{ py: 4, pb: 8 }}>
       <Container maxWidth="lg">
-        {/* Page Header */}
+        {/* Header Giỏ hàng */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
           <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase' }}>
             Giỏ hàng của bạn ({cart.items.length} món)
@@ -99,9 +98,17 @@ export const CartPage = ({ onNavigate }) => {
           </Button>
         </Box>
 
-        <Grid container spacing={3.5}>
-          {/* Cart Items List */}
-          <Grid item xs={12} md={8}>
+        {/* Bố cục 2 bên: Cột trái (Items List) và Cột phải (Summary Box) */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: '1fr 380px' },
+            gap: 3.5,
+            alignItems: 'start',
+          }}
+        >
+          {/* CỘT BÊN TRÁI: Danh sách sản phẩm trong giỏ */}
+          <Box>
             <Paper elevation={1} sx={{ borderRadius: 3, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
               <Stack divider={<Divider />}>
                 {cart.items.map((item) => {
@@ -120,7 +127,7 @@ export const CartPage = ({ onNavigate }) => {
                         flexWrap: { xs: 'wrap', sm: 'nowrap' },
                       }}
                     >
-                      {/* Product Thumbnail */}
+                      {/* Ảnh sản phẩm */}
                       <Box
                         component="img"
                         src={item.thumbnail_url || 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=200&q=80'}
@@ -133,13 +140,13 @@ export const CartPage = ({ onNavigate }) => {
                           p: 0.5,
                           borderRadius: 2,
                           border: '1px solid #E5E7EB',
-                          backgroundColor: '#FFFFFF',
+                          bgcolor: '#FFFFFF',
                           cursor: 'pointer',
                           flexShrink: 0,
                         }}
                       />
 
-                      {/* Info */}
+                      {/* Thông tin sản phẩm */}
                       <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 0 } }}>
                         <Typography
                           variant="subtitle1"
@@ -166,27 +173,19 @@ export const CartPage = ({ onNavigate }) => {
                             height: 20,
                             fontSize: '0.6875rem',
                             fontWeight: 700,
-                            backgroundColor: '#D1FAE5',
+                            bgcolor: '#D1FAE5',
                             color: '#065F46',
                             mt: 0.75,
                           }}
                         />
                       </Box>
 
-                      {/* Quantity Stepper */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          border: '1px solid #E5E7EB',
-                          borderRadius: 2,
-                          overflow: 'hidden',
-                        }}
-                      >
+                      {/* Bộ tăng giảm số lượng */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #E5E7EB', borderRadius: 2 }}>
                         <IconButton
                           size="small"
                           onClick={() => updateQuantity(item.cart_item_id, item.quantity - 1)}
-                          sx={{ p: 0.5, borderRadius: 0 }}
+                          sx={{ p: 0.5 }}
                         >
                           <RemoveIcon fontSize="small" />
                         </IconButton>
@@ -196,14 +195,14 @@ export const CartPage = ({ onNavigate }) => {
                         <IconButton
                           size="small"
                           onClick={() => updateQuantity(item.cart_item_id, item.quantity + 1)}
-                          sx={{ p: 0.5, borderRadius: 0 }}
+                          sx={{ p: 0.5 }}
                         >
                           <AddIcon fontSize="small" />
                         </IconButton>
                       </Box>
 
-                      {/* Price Column */}
-                      <Box sx={{ textAlign: 'right', minWidth: 110 }}>
+                      {/* Cột giá tiền */}
+                      <Box sx={{ textAlign: 'right', minWidth: 115 }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'primary.main' }}>
                           {formatPrice(unitPrice * item.quantity)}
                         </Typography>
@@ -214,7 +213,7 @@ export const CartPage = ({ onNavigate }) => {
                         )}
                       </Box>
 
-                      {/* Delete */}
+                      {/* Nút xóa món */}
                       <IconButton
                         onClick={() => removeItem(item.cart_item_id)}
                         sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
@@ -237,133 +236,142 @@ export const CartPage = ({ onNavigate }) => {
                 ← Tiếp tục lựa chọn sản phẩm khác
               </Button>
             </Box>
-          </Grid>
+          </Box>
 
-          {/* Right Summary Box */}
-          <Grid item xs={12} md={4}>
-            <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
-              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>
-                Tóm tắt đơn hàng
-              </Typography>
+          {/* CỘT BÊN PHẢI: Hộp tóm tắt đơn hàng (Sticky trượt theo cuộn) */}
+          <Paper
+            elevation={1}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: '1px solid #E5E7EB',
+              bgcolor: '#FFFFFF',
+              position: { md: 'sticky' },
+              top: 24,
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>
+              Tóm tắt đơn hàng
+            </Typography>
 
-              {/* Coupon Form */}
-              <Box component="form" onSubmit={handleApplyCoupon} sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <TextField
+            {/* Ô nhập Voucher */}
+            <Box component="form" onSubmit={handleApplyCoupon} sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Mã Voucher (GEARK10)"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+              />
+              <AppButton
+                type="submit"
+                variant="primary"
+                size="small"
+                loading={validatingCoupon}
+                sx={{ flexShrink: 0, px: 2 }}
+              >
+                Áp dụng
+              </AppButton>
+            </Box>
+
+            {/* Mã giảm giá đã áp dụng */}
+            {appliedCoupon && (
+              <Box
+                sx={{
+                  p: 1.25,
+                  px: 1.5,
+                  borderRadius: 2,
+                  bgcolor: '#D1FAE5',
+                  color: '#065F46',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LocalOfferIcon fontSize="small" />
+                  <Typography variant="caption" sx={{ fontWeight: 800 }}>
+                    Đã áp dụng: {appliedCoupon.coupon_code}
+                  </Typography>
+                </Box>
+                <Button
                   size="small"
-                  fullWidth
-                  placeholder="Mã Voucher (GEARK10)"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                />
-                <AppButton
-                  type="submit"
-                  variant="primary"
-                  size="small"
-                  loading={validatingCoupon}
-                  sx={{ flexShrink: 0 }}
+                  onClick={() => setAppliedCoupon(null)}
+                  sx={{ color: 'error.main', fontWeight: 800, minWidth: 'auto', p: 0 }}
                 >
-                  Áp dụng
-                </AppButton>
+                  Gỡ
+                </Button>
+              </Box>
+            )}
+
+            {/* Các dòng chi tiết tiền */}
+            <Stack spacing={1.5} sx={{ my: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Tạm tính:
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  {formatPrice(subtotal)}
+                </Typography>
               </Box>
 
-              {/* Applied Coupon Display */}
               {appliedCoupon && (
-                <Box
-                  sx={{
-                    p: 1.25,
-                    px: 1.5,
-                    borderRadius: 2,
-                    backgroundColor: '#D1FAE5',
-                    color: '#065F46',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    mb: 2,
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <LocalOfferIcon fontSize="small" />
-                    <Typography variant="caption" sx={{ fontWeight: 800 }}>
-                      Đã áp dụng mã: {appliedCoupon.coupon_code}
-                    </Typography>
-                  </Box>
-                  <Button
-                    size="small"
-                    onClick={() => setAppliedCoupon(null)}
-                    sx={{ color: 'error.main', fontWeight: 800, minWidth: 'auto', p: 0 }}
-                  >
-                    Gỡ
-                  </Button>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'success.main' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Giảm giá Voucher:
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                    -{formatPrice(discountAmount)}
+                  </Typography>
                 </Box>
               )}
 
-              {/* Summary Rows */}
-              <Stack spacing={1.5} sx={{ my: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Tạm tính:
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {formatPrice(subtotal)}
-                  </Typography>
-                </Box>
-
-                {appliedCoupon && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'success.main' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      Giảm giá Voucher:
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                      -{formatPrice(discountAmount)}
-                    </Typography>
-                  </Box>
-                )}
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Phí vận chuyển:
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 800, color: 'success.main' }}>
-                    MIỄN PHÍ
-                  </Typography>
-                </Box>
-
-                <Divider />
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                    Tổng thanh toán:
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main' }}>
-                    {formatPrice(finalTotal)}
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 3 }}>
-                (Đã bao gồm thuế VAT 10% & miễn phí vận chuyển tận nơi)
-              </Typography>
-
-              <AppButton
-                variant="primary"
-                size="large"
-                fullWidth
-                glow
-                onClick={() => onNavigate(appliedCoupon ? `checkout?coupon=${appliedCoupon.coupon_code}` : 'checkout')}
-                sx={{ py: 1.5 }}
-              >
-                Tiến hành đặt hàng
-              </AppButton>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 2, color: 'text.secondary' }}>
-                <SecurityIcon sx={{ fontSize: 18, color: 'success.main' }} />
-                <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                  Thanh toán an toàn, bảo mật dữ liệu 100%
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Phí vận chuyển:
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 800, color: 'success.main' }}>
+                  MIỄN PHÍ
                 </Typography>
               </Box>
-            </Paper>
-          </Grid>
-        </Grid>
+
+              <Divider />
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                  Tổng thanh toán:
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900, color: 'primary.main' }}>
+                  {formatPrice(finalTotal)}
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 3 }}>
+              (Đã bao gồm thuế VAT 10% & miễn phí vận chuyển tận nơi)
+            </Typography>
+
+            {/* Nút đặt hàng */}
+            <AppButton
+              variant="primary"
+              size="large"
+              fullWidth
+              glow
+              onClick={() => onNavigate(appliedCoupon ? `checkout?coupon=${appliedCoupon.coupon_code}` : 'checkout')}
+              sx={{ py: 1.5 }}
+            >
+              Tiến hành đặt hàng
+            </AppButton>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 2, color: 'text.secondary' }}>
+              <SecurityIcon sx={{ fontSize: 18, color: 'success.main' }} />
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                Thanh toán an toàn, bảo mật dữ liệu 100%
+              </Typography>
+            </Box>
+          </Paper>
+        </Box>
       </Container>
     </Box>
   );

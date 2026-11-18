@@ -249,15 +249,28 @@ async function googleLogin(req, res, next) {
       console.warn('[Google Auth] Không thể kết nối tới Google tokeninfo API, thử decode cục bộ:', networkErr.message);
     }
 
-    // 2. Fallback decode bằng JWT nếu mạng offline hoặc môi trường dev
-    if (!payload || payload.error || payload.error_description) {
+    // 2. Fallback decode bằng JWT hoặc parse base64 payload nếu mạng offline hoặc môi trường dev
+    if (!payload || payload.error || payload.error_description || !payload.email) {
       try {
         const decoded = jwt.decode(credential);
         if (decoded && decoded.email) {
           payload = decoded;
+        } else {
+          // Parse trực tiếp phần payload base64 / base64url của JWT
+          const parts = String(credential).split('.');
+          if (parts.length >= 2) {
+            const rawBase64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const padLen = (4 - (rawBase64.length % 4)) % 4;
+            const paddedBase64 = rawBase64 + '='.repeat(padLen);
+            const jsonStr = Buffer.from(paddedBase64, 'base64').toString('utf8');
+            const parsed = JSON.parse(jsonStr);
+            if (parsed && parsed.email) {
+              payload = parsed;
+            }
+          }
         }
       } catch (decodeErr) {
-        // ignore
+        console.warn('[Google Auth] Decode fallback error:', decodeErr.message);
       }
     }
 

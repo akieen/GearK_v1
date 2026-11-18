@@ -107,23 +107,26 @@ export default function GoogleLoginButton({ onGoogleSuccess, disabled = false })
     setLoading(true);
     setShowConfigDialog(false);
     try {
-      // Tạo token demo hợp lệ định dạng JWT để Backend decode
-      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-      const payload = btoa(
-        unescape(
-          encodeURIComponent(
-            JSON.stringify({
-              iss: 'https://accounts.google.com',
-              sub: 'google_test_' + Date.now(),
-              email: customEmail.trim(),
-              email_verified: true,
-              name: customName.trim() || 'Người dùng Google',
-              picture: 'https://lh3.googleusercontent.com/a/default-user',
-            })
-          )
-        )
+      // Helper mã hóa Base64Url chuẩn JWT
+      const base64Url = (str) =>
+        btoa(unescape(encodeURIComponent(str)))
+          .replace(/=/g, '')
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_');
+
+      // Tạo token demo hợp lệ định dạng JWT base64url để Backend decode
+      const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+      const payload = base64Url(
+        JSON.stringify({
+          iss: 'https://accounts.google.com',
+          sub: 'google_test_' + Date.now(),
+          email: customEmail.trim(),
+          email_verified: true,
+          name: customName.trim() || 'Người dùng Google',
+          picture: 'https://lh3.googleusercontent.com/a/default-user',
+        })
       );
-      const signature = btoa('demo_signature');
+      const signature = base64Url('demo_signature');
       const fakeGoogleToken = `${header}.${payload}.${signature}`;
 
       await onGoogleSuccess(fakeGoogleToken);
