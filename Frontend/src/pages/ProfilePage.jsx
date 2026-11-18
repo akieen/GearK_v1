@@ -21,6 +21,8 @@ import { addressApi } from '../api/extraApi';
 import { AppButton } from '../components/ui/AppButton';
 import { AppInput } from '../components/ui/AppInput';
 import { EmptyState } from '../components/ui/EmptyState';
+import VietnamAddressFields from '../components/common/VietnamAddressFields';
+import vietnamAddressService from '../services/vietnamAddressService';
 
 export const ProfilePage = ({ onNavigate }) => {
   const { user, openAuthModal, refreshProfile } = useAuth();
@@ -33,7 +35,9 @@ export const ProfilePage = ({ onNavigate }) => {
   const [addresses, setAddresses] = useState([]);
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
-  const [streetAddress, setStreetAddress] = useState('');
+  const [selectedProvince, setSelectedProvince] = useState(null);
+  const [selectedWard, setSelectedWard] = useState(null);
+  const [detailAddress, setDetailAddress] = useState('');
   const [addingAddress, setAddingAddress] = useState(false);
 
   useEffect(() => {
@@ -79,23 +83,32 @@ export const ProfilePage = ({ onNavigate }) => {
 
   const handleAddAddress = async (e) => {
     e.preventDefault();
-    if (!recipientName || !recipientPhone || !streetAddress) {
-      toast.warning('Vui lòng nhập đủ thông tin địa chỉ!');
+    if (!recipientName || !recipientPhone || !selectedProvince || !selectedWard || !detailAddress) {
+      toast.warning('Vui lòng chọn Tỉnh/Thành, Phường/Xã và nhập địa chỉ chi tiết!');
       return;
     }
+
+    const fullStreetAddress = vietnamAddressService.formatAddress(
+      detailAddress,
+      selectedWard,
+      selectedProvince
+    );
+
     setAddingAddress(true);
     try {
       const res = await addressApi.createAddress({
         recipient_name: recipientName.trim(),
         recipient_phone: recipientPhone.trim(),
-        street_address: streetAddress.trim(),
+        street_address: fullStreetAddress,
         is_default: addresses.length === 0,
       });
       if (res.success) {
         toast.success('Đã thêm địa chỉ mới!');
         setRecipientName('');
         setRecipientPhone('');
-        setStreetAddress('');
+        setSelectedProvince(null);
+        setSelectedWard(null);
+        setDetailAddress('');
         loadAddresses();
       }
     } catch (err) {
@@ -286,7 +299,7 @@ export const ProfilePage = ({ onNavigate }) => {
 
               <Box component="form" onSubmit={handleAddAddress}>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <AppInput
                       topLabel="Họ tên người nhận"
                       placeholder="Nguyễn Văn Khách"
@@ -295,7 +308,7 @@ export const ProfilePage = ({ onNavigate }) => {
                       required
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <AppInput
                       topLabel="Số điện thoại"
                       placeholder="0987654321"
@@ -305,15 +318,15 @@ export const ProfilePage = ({ onNavigate }) => {
                       required
                     />
                   </Grid>
-                  <Grid item xs={12}>
-                    <AppInput
-                      topLabel="Địa chỉ cụ thể"
-                      placeholder="Số nhà, đường, phường, quận..."
-                      value={streetAddress}
-                      onChange={(e) => setStreetAddress(e.target.value)}
-                      required
-                    />
-                  </Grid>
+                  <VietnamAddressFields
+                    selectedProvince={selectedProvince}
+                    setSelectedProvince={setSelectedProvince}
+                    selectedWard={selectedWard}
+                    setSelectedWard={setSelectedWard}
+                    detailAddress={detailAddress}
+                    setDetailAddress={setDetailAddress}
+                    disabled={addingAddress}
+                  />
                 </Grid>
 
                 <AppButton

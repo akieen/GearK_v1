@@ -31,6 +31,8 @@ import { formatPrice } from '../utils/formatters';
 import { AppDialog } from '../components/ui/AppDialog';
 import { AppButton } from '../components/ui/AppButton';
 import { AppInput } from '../components/ui/AppInput';
+import VietnamAddressFields from '../components/common/VietnamAddressFields';
+import vietnamAddressService from '../services/vietnamAddressService';
 
 export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) => {
   const { cart, cartTotal, fetchCart } = useCart();
@@ -42,7 +44,9 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   const [newRecipientName, setNewRecipientName] = useState('');
   const [newRecipientPhone, setNewRecipientPhone] = useState('');
-  const [newStreetAddress, setNewStreetAddress] = useState('');
+  const [newProvince, setNewProvince] = useState(null);
+  const [newWard, setNewWard] = useState(null);
+  const [newDetailAddress, setNewDetailAddress] = useState('');
   const [savingAddress, setSavingAddress] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState('cod');
@@ -98,16 +102,23 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
 
   const handleAddNewAddress = async (e) => {
     e.preventDefault();
-    if (!newRecipientName || !newRecipientPhone || !newStreetAddress) {
-      toast.warning('Vui lòng điền đầy đủ thông tin giao hàng!');
+    if (!newRecipientName || !newRecipientPhone || !newProvince || !newWard || !newDetailAddress) {
+      toast.warning('Vui lòng chọn Tỉnh/Thành, Phường/Xã và nhập địa chỉ chi tiết!');
       return;
     }
+
+    const fullStreetAddress = vietnamAddressService.formatAddress(
+      newDetailAddress,
+      newWard,
+      newProvince
+    );
+
     setSavingAddress(true);
     try {
       const res = await addressApi.createAddress({
         recipient_name: newRecipientName.trim(),
         recipient_phone: newRecipientPhone.trim(),
-        street_address: newStreetAddress.trim(),
+        street_address: fullStreetAddress,
         is_default: addresses.length === 0,
       });
       if (res.success && res.data) {
@@ -116,6 +127,11 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
         const updatedList = await addressApi.getAddresses();
         setAddresses(updatedList.data || []);
         setSelectedAddressId(createdId);
+        setNewRecipientName('');
+        setNewRecipientPhone('');
+        setNewProvince(null);
+        setNewWard(null);
+        setNewDetailAddress('');
         setShowNewAddressForm(false);
       }
     } catch (err) {
@@ -265,7 +281,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                 {showNewAddressForm ? (
                   <Box component="form" onSubmit={handleAddNewAddress} sx={{ p: 2.5, backgroundColor: '#F8FAFC', borderRadius: 2, border: '1px solid #E5E7EB' }}>
                     <Grid container spacing={2}>
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <AppInput
                           topLabel="Họ và tên người nhận"
                           placeholder="Nguyễn Văn Khách"
@@ -274,7 +290,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                           required
                         />
                       </Grid>
-                      <Grid item xs={12} sm={6}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
                         <AppInput
                           topLabel="Số điện thoại"
                           placeholder="0987654321"
@@ -284,15 +300,15 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                           required
                         />
                       </Grid>
-                      <Grid item xs={12}>
-                        <AppInput
-                          topLabel="Địa chỉ cụ thể (Số nhà, Tên đường, Phường/Xã, Quận/Huyện, Tỉnh/TP)"
-                          placeholder="Số 123 Đường Cầu Giấy, Phường Dịch Vọng, Quận Cầu Giấy, Hà Nội"
-                          value={newStreetAddress}
-                          onChange={(e) => setNewStreetAddress(e.target.value)}
-                          required
-                        />
-                      </Grid>
+                      <VietnamAddressFields
+                        selectedProvince={newProvince}
+                        setSelectedProvince={setNewProvince}
+                        selectedWard={newWard}
+                        setSelectedWard={setNewWard}
+                        detailAddress={newDetailAddress}
+                        setDetailAddress={setNewDetailAddress}
+                        disabled={savingAddress}
+                      />
                     </Grid>
                     <Stack direction="row" spacing={1.5} sx={{ mt: 2 }}>
                       <AppButton type="submit" variant="primary" size="small" loading={savingAddress}>
