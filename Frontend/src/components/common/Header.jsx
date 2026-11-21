@@ -24,6 +24,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import LogoutIcon from '@mui/icons-material/Logout';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 
 import { useAuth } from '../../context/AuthContext';
@@ -702,6 +703,17 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                     >
                       <PersonIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
                       Thông tin tài khoản
+                    </MenuItem>
+
+                    <MenuItem
+                      onClick={() => {
+                        setUserMenuAnchor(null);
+                        onNavigate('change-password');
+                      }}
+                      sx={{ py: 1.25 }}
+                    >
+                      <LockResetIcon fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
+                      Đổi mật khẩu
                     </MenuItem>
 
                     <Divider />

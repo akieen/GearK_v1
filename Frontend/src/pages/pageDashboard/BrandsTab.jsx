@@ -24,7 +24,6 @@ import AdminPagination from '../../components/common/AdminPagination';
 export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
   const toast = useToast();
   const [newBrandName, setNewBrandName] = useState('');
-  const [newLogoUrl, setNewLogoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Pagination state
@@ -43,12 +42,10 @@ export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
     try {
       const res = await brandApi.createBrand({
         brand_name: newBrandName.trim(),
-        logo_url: newLogoUrl.trim() || null,
       });
       if (res.success) {
         toast.success(`Đã thêm thương hiệu "${newBrandName.trim()}"!`);
         setNewBrandName('');
-        setNewLogoUrl('');
         fetchBrands();
       }
     } catch (err) {
@@ -80,31 +77,19 @@ export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
         </Stack>
 
         <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <Box sx={{ flex: 1, minWidth: 200 }}>
+          <Box sx={{ flex: 1, minWidth: 260 }}>
             <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Tên thương hiệu *</Typography>
             <TextField
               fullWidth
               size="small"
               required
-              placeholder="VD: Logitech G, Razer, Corsair, Asus ROG..."
+              placeholder="VD: Logitech G, Razer, Corsair, Asus ROG, SteelSeries..."
               value={newBrandName}
               onChange={(e) => setNewBrandName(e.target.value)}
             />
           </Box>
 
-          <Box sx={{ flex: 1, minWidth: 240 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.75 }}>Logo URL (Tùy chọn)</Typography>
-            <TextField
-              fullWidth
-              size="small"
-              type="url"
-              placeholder="https://..."
-              value={newLogoUrl}
-              onChange={(e) => setNewLogoUrl(e.target.value)}
-            />
-          </Box>
-
-          <Button type="submit" variant="contained" disabled={submitting} startIcon={<AddIcon />} sx={{ height: 40 }}>
+          <Button type="submit" variant="contained" disabled={submitting} startIcon={<AddIcon />} sx={{ height: 40, px: 3 }}>
             {submitting ? 'Đang tạo...' : 'Thêm thương hiệu'}
           </Button>
         </Box>
@@ -120,7 +105,6 @@ export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
           <TableHead>
             <TableRow sx={{ bgcolor: '#F8FAFC' }}>
               <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>ID</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Logo</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Tên thương hiệu</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Slug</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: 12.5 }}>Số sản phẩm</TableCell>
@@ -130,20 +114,13 @@ export default function BrandsTab({ brands = [], fetchBrands, isAdmin }) {
           <TableBody>
             {brands.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có thương hiệu nào</TableCell>
+                <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>Chưa có thương hiệu nào</TableCell>
               </TableRow>
             ) : (
               paginatedBrands.map((b) => (
                 <TableRow key={b.brand_id} hover>
                   <TableCell sx={{ fontWeight: 700, color: 'text.secondary', py: 1.5 }}>#{b.brand_id}</TableCell>
-                  <TableCell>
-                    {b.logo_url ? (
-                      <Box component="img" src={b.logo_url} alt={b.brand_name} sx={{ height: 28, maxWidth: 60, objectFit: 'contain' }} />
-                    ) : (
-                      <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>Không có</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>{b.brand_name}</TableCell>
+                  <TableCell sx={{ fontWeight: 800, fontSize: 13.5 }}>{b.brand_name}</TableCell>
                   <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontFamily: 'monospace' }}>{b.slug}</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{b.product_count ?? 0}</TableCell>
                   <TableCell>

@@ -25,6 +25,12 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
+import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
+import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 
 import { productApi } from '../api/productApi';
 import { reviewApi } from '../api/extraApi';
@@ -314,6 +320,42 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
                   Mua ngay
                 </AppButton>
               </Stack>
+
+              {/* Chính sách bảo hành nổi bật & cam kết */}
+              <Box
+                sx={{
+                  mt: 2.5,
+                  p: 2,
+                  borderRadius: 2.5,
+                  bgcolor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.25, display: 'flex', alignItems: 'center', gap: 1, color: '#0F172A' }}>
+                  <VerifiedUserOutlinedIcon sx={{ fontSize: 18, color: '#16A34A' }} />
+                  Chính sách bảo hành & Quyền lợi khách hàng
+                </Typography>
+                <Stack spacing={1}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ShieldOutlinedIcon sx={{ fontSize: 16, color: '#2563EB', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary' }}>
+                      Bảo hành chính hãng: <strong style={{ color: '#0F172A' }}>{selectedVariant?.warranty_months || 24} tháng</strong> (kích hoạt điện tử)
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AutorenewOutlinedIcon sx={{ fontSize: 16, color: '#EA580C', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary' }}>
+                      <strong style={{ color: '#0F172A' }}>1 đổi 1 trong 30 ngày</strong> nếu phát sinh lỗi phần cứng do nhà sản xuất
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LocalShippingOutlinedIcon sx={{ fontSize: 16, color: '#7C3AED', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary' }}>
+                      Hỗ trợ nhận & gửi bảo hành tận nhà trên toàn quốc
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Box>
             </Paper>
           </Box>
         </Box>
@@ -354,6 +396,58 @@ export const ProductDetailPage = ({ slug, onNavigate }) => {
             </Table>
           </Paper>
         </Box>
+
+        {/* Chính sách bảo hành chi tiết sản phẩm */}
+        <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 3, border: '1px solid #E2E8F0', bgcolor: '#FFF' }}>
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 2 }}>
+            <ShieldOutlinedIcon sx={{ fontSize: 24, color: '#2563EB' }} />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: '#0F172A' }}>
+                Chính sách bảo hành chính hãng GearK
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                Áp dụng cho tất cả sản phẩm phân phối chính hãng bởi GearK Gaming Store
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 2.5, pt: 1 }}>
+            <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'primary.main', mb: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <AssignmentTurnedInOutlinedIcon sx={{ fontSize: 18 }} />
+                1. Thời hạn & Điều kiện
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.6 }}>
+                • Thời hạn: <strong>{selectedVariant?.warranty_months || 24} tháng</strong> kể từ ngày nhận hàng.<br />
+                • Bảo hành điện tử tự động lưu trên hệ thống theo số Serial / Mã đơn hàng.<br />
+                • Sản phẩm còn nguyên tem niêm phong, không bị nứt vỡ hay can thiệp bên trong.
+              </Typography>
+            </Box>
+
+            <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#EA580C', mb: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <AutorenewOutlinedIcon sx={{ fontSize: 18 }} />
+                2. Chính sách 1 đổi 1
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.6 }}>
+                • Đổi mới 100% nguyên seal trong <strong>30 ngày đầu</strong> nếu có lỗi từ nhà sản xuất.<br />
+                • Nếu hãng hết linh kiện thay thế quá 15 ngày, GearK hỗ trợ đổi sản phẩm tương đương hoặc hoàn tiền theo quy định.
+              </Typography>
+            </Box>
+
+            <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#16A34A', mb: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <SupportAgentOutlinedIcon sx={{ fontSize: 18 }} />
+                3. Quy trình tiếp nhận
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.6 }}>
+                • Tiếp nhận tại cửa hàng hoặc gửi qua chuyển phát (Viettel Post, GHTK, GHN...).<br />
+                • Thời gian xử lý: 3 - 7 ngày làm việc.<br />
+                • Hotline hỗ trợ kỹ thuật & tra cứu tiến độ bảo hành: <strong>1900 6868</strong>.
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
 
         {/* Reviews Section */}
         <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid #E2E8F0', bgcolor: '#FFF' }}>

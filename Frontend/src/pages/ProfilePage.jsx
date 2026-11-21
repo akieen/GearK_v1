@@ -29,7 +29,6 @@ export const ProfilePage = ({ onNavigate }) => {
   const toast = useToast();
 
   const [fullName, setFullName] = useState(user?.full_name || '');
-  const [password, setPassword] = useState('');
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
@@ -62,16 +61,15 @@ export const ProfilePage = ({ onNavigate }) => {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    if (!fullName.trim()) {
+      return toast.warning('Họ và tên không được để trống!');
+    }
+
     setUpdatingProfile(true);
     try {
-      const payload = { full_name: fullName };
-      if (password.trim()) {
-        payload.password = password.trim();
-      }
-      const res = await authApi.updateProfile(payload);
+      const res = await authApi.updateProfile({ full_name: fullName.trim() });
       if (res.success) {
         toast.success('Cập nhật thông tin tài khoản thành công!');
-        setPassword('');
         refreshProfile();
       }
     } catch (err) {
@@ -150,7 +148,7 @@ export const ProfilePage = ({ onNavigate }) => {
         {/* Header */}
         <Box sx={{ mb: 4, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
           <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase', color: 'text.primary' }}>
-            Tài khoản của tôi
+            Thông tin tài khoản
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
             Quản lý thông tin cá nhân và sổ địa chỉ giao hàng.
@@ -158,7 +156,7 @@ export const ProfilePage = ({ onNavigate }) => {
         </Box>
 
         <Grid container spacing={3.5}>
-          {/* Left: User Profile Form */}
+          {/* Left: 1 khung duy nhất cho User Profile Form */}
           <Grid item xs={12} md={5}>
             <Paper elevation={1} sx={{ p: 3.5, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -197,19 +195,18 @@ export const ProfilePage = ({ onNavigate }) => {
 
               <Box component="form" onSubmit={handleUpdateProfile}>
                 <AppInput
-                  topLabel="Họ và tên"
+                  topLabel="Họ và tên *"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
+                  placeholder="Nhập họ và tên..."
                 />
 
                 <AppInput
-                  topLabel="Đổi mật khẩu mới (Bỏ trống nếu không đổi)"
-                  type="password"
-                  placeholder="Nhập mật khẩu mới..."
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  sx={{ mb: 2 }}
+                  topLabel="Địa chỉ Email (Cố định theo tài khoản)"
+                  value={user.email}
+                  disabled
+                  sx={{ mb: 2.5 }}
                 />
 
                 <AppButton
@@ -299,18 +296,18 @@ export const ProfilePage = ({ onNavigate }) => {
 
               <Box component="form" onSubmit={handleAddAddress}>
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6 }}>
+                  <Grid item xs={12} sm={6}>
                     <AppInput
-                      topLabel="Họ tên người nhận"
+                      topLabel="Họ tên người nhận *"
                       placeholder="Nguyễn Văn Khách"
                       value={recipientName}
                       onChange={(e) => setRecipientName(e.target.value)}
                       required
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
+                  <Grid item xs={12} sm={6}>
                     <AppInput
-                      topLabel="Số điện thoại"
+                      topLabel="Số điện thoại *"
                       placeholder="0987654321"
                       type="tel"
                       value={recipientPhone}

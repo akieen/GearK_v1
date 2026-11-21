@@ -48,6 +48,8 @@ export default function AddProductModal({
   setNewVariantPrice,
   newVariantSalePrice,
   setNewVariantSalePrice,
+  newVariantWarranty = '24',
+  setNewVariantWarranty = () => {},
   newVariantStock = '0',
   setNewVariantStock = () => {},
   newVariantImages = [],
@@ -198,6 +200,20 @@ export default function AddProductModal({
               <Box>
                 <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Giá khuyến mãi (₫)</Typography>
                 <TextField fullWidth size="small" type="number" placeholder="VD: 3590000" value={newVariantSalePrice} onChange={(e) => setNewVariantSalePrice(e.target.value)} />
+              </Box>
+
+              <Box sx={{ gridColumn: 'span 2' }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Thời hạn bảo hành chính hãng (tháng) *</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  required
+                  placeholder="VD: 24"
+                  value={newVariantWarranty}
+                  onChange={(e) => setNewVariantWarranty(e.target.value)}
+                  helperText="Thời hạn bảo hành điện tử theo serial được cam kết với khách hàng."
+                />
               </Box>
 
               <Box sx={{ gridColumn: 'span 2' }}>

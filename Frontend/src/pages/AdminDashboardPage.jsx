@@ -33,6 +33,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -53,6 +54,7 @@ import VariantsTab from './pageDashboard/VariantsTab';
 import InventoryTab from './pageDashboard/InventoryTab';
 import UsersTab from './pageDashboard/UsersTab';
 import ReviewsTab from './pageDashboard/ReviewsTab';
+import WarrantyTab from './pageDashboard/WarrantyTab';
 import AddProductModal from './pageDashboard/AddProductModal';
 import EditProductModal from './pageDashboard/EditProductModal';
 
@@ -77,6 +79,8 @@ const PATH_TO_TAB = {
   'users': 'users',
   'review': 'reviews',
   'reviews': 'reviews',
+  'warranty': 'warranties',
+  'warranties': 'warranties',
 };
 
 const TAB_TO_PATH = {
@@ -90,6 +94,7 @@ const TAB_TO_PATH = {
   inventory: 'admin/inventory',
   users: 'admin/user',
   reviews: 'admin/reviews',
+  warranties: 'admin/warranties',
 };
 
 export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
@@ -162,6 +167,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
   const [newVariantName, setNewVariantName] = useState('');
   const [newVariantPrice, setNewVariantPrice] = useState('');
   const [newVariantSalePrice, setNewVariantSalePrice] = useState('');
+  const [newVariantWarranty, setNewVariantWarranty] = useState('24');
   const [newVariantStock, setNewVariantStock] = useState('0');
   const [newVariantImages, setNewVariantImages] = useState([]);
   const [submittingProduct, setSubmittingProduct] = useState(false);
@@ -302,7 +308,8 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
           price: parseFloat(newVariantPrice),
           sale_price: newVariantSalePrice ? parseFloat(newVariantSalePrice) : parseFloat(newVariantPrice),
           stock: 0,
-          specifications: { 'Bảo hành': '24 tháng', 'Tình trạng': 'Mới 100% fullbox' },
+          warranty_months: parseInt(newVariantWarranty) || 24,
+          specifications: { 'Bảo hành': `${parseInt(newVariantWarranty) || 24} tháng`, 'Tình trạng': 'Mới 100% fullbox' },
           images: newVariantImages,
         }],
       });
@@ -311,6 +318,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
         setShowAddProductModal(false);
         setNewProdName(''); setNewProdDesc(''); setNewProdThumb(''); setNewProdImages([]);
         setNewVariantSku(''); setNewVariantName(''); setNewVariantPrice(''); setNewVariantSalePrice(''); setNewVariantImages([]);
+        setNewVariantWarranty('24');
         fetchProducts();
       }
     } catch (err) {
@@ -517,6 +525,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
 
           {renderGroupTitle('BÁN HÀNG & ĐƠN HÀNG')}
           {renderNavBtn('orders', 'Đơn hàng (Orders)', <ConfirmationNumberOutlinedIcon sx={{ fontSize: 18 }} />)}
+          {renderNavBtn('warranties', 'Quản lý Bảo hành', <VerifiedUserOutlinedIcon sx={{ fontSize: 18 }} />)}
           {renderNavBtn(
             'users',
             'Nhân sự & Khách hàng',
@@ -525,7 +534,6 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
             !isAdmin && <Chip label="Admin" size="small" sx={{ height: 18, fontSize: 10, bgcolor: '#F1F5F9', color: '#94A3B8' }} />
           )}
           {renderNavBtn('reviews', 'Đánh giá sản phẩm', <RateReviewOutlinedIcon sx={{ fontSize: 18 }} />)}
-          {renderNavBtn('calendar', 'Lịch giao hàng (Calendar)', <CalendarTodayOutlinedIcon sx={{ fontSize: 18 }} />, () => toast.info('Lịch hẹn bảo hành & sự kiện'))}
 
           {renderGroupTitle('SẢN PHẨM & KHO HÀNG')}
           {renderNavBtn('inventory', 'Quản lý Tồn kho', <GridViewOutlinedIcon sx={{ fontSize: 18 }} />)}
@@ -725,6 +733,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
           )}
           {activeTab === 'users' && <UsersTab user={user} isAdmin={isAdmin} toast={toast} Icons={Icons} />}
           {activeTab === 'reviews' && <ReviewsTab isAdmin={isAdmin} formatPrice={formatPrice} />}
+          {activeTab === 'warranties' && <WarrantyTab isAdmin={isAdmin} formatPrice={formatPrice} Icons={Icons} />}
         </Box>
       </Box>
 
@@ -741,6 +750,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
         newVariantSku={newVariantSku} setNewVariantSku={setNewVariantSku}
         newVariantPrice={newVariantPrice} setNewVariantPrice={setNewVariantPrice}
         newVariantSalePrice={newVariantSalePrice} setNewVariantSalePrice={setNewVariantSalePrice}
+        newVariantWarranty={newVariantWarranty} setNewVariantWarranty={setNewVariantWarranty}
         newVariantStock={newVariantStock} setNewVariantStock={setNewVariantStock}
         newVariantImages={newVariantImages} setNewVariantImages={setNewVariantImages}
         Icons={Icons}

@@ -47,6 +47,17 @@ export const getOrderStatusText = (status) => {
   return map[status] || { label: status, color: '#6B7280', bg: '#F3F4F6' };
 };
 
+export const getWarrantyStatusText = (status) => {
+  const map = {
+    pending: { label: 'Chờ duyệt', color: '#D97706', bg: '#FEF3C7' },
+    approved: { label: 'Đã duyệt / Tiếp nhận', color: '#2563EB', bg: '#DBEAFE' },
+    repairing: { label: 'Đang sửa chữa / Xử lý', color: '#7C3AED', bg: '#EDE9FE' },
+    completed: { label: 'Đã hoàn thành', color: '#059669', bg: '#D1FAE5' },
+    rejected: { label: 'Từ chối', color: '#DC2626', bg: '#FEE2E2' },
+  };
+  return map[status] || { label: status || 'Không rõ', color: '#6B7280', bg: '#F3F4F6' };
+};
+
 export const removeVietnameseTones = (str) => {
   if (!str) return '';
   return str

@@ -17,7 +17,6 @@ async function getBrands(req, res, next) {
       brand_id: b.brand_id,
       brand_name: b.brand_name,
       slug: b.slug,
-      logo_url: b.logo_url,
       created_at: b.created_at,
       updated_at: b.updated_at,
       product_count: b._count.products,
@@ -51,7 +50,7 @@ async function getBrandBySlug(req, res, next) {
 // [POST] /api/brands (Admin only)
 async function createBrand(req, res, next) {
   try {
-    const { brand_name, slug, logo_url } = req.body;
+    const { brand_name, slug } = req.body;
 
     if (!brand_name) {
       return errorResponse(res, 'Vui lòng cung cấp tên thương hiệu', 400);
@@ -63,7 +62,6 @@ async function createBrand(req, res, next) {
       data: {
         brand_name: brand_name.trim(),
         slug: finalSlug,
-        logo_url: logo_url || null,
       },
     });
 
@@ -73,7 +71,6 @@ async function createBrand(req, res, next) {
         brand_id: brand.brand_id,
         brand_name: brand.brand_name,
         slug: brand.slug,
-        logo_url: brand.logo_url,
       },
       'Thêm thương hiệu thành công',
       201
@@ -87,7 +84,7 @@ async function createBrand(req, res, next) {
 async function updateBrand(req, res, next) {
   try {
     const brandId = BigInt(req.params.id);
-    const { brand_name, slug, logo_url } = req.body;
+    const { brand_name, slug } = req.body;
 
     const existing = await prisma.brand.findUnique({
       where: { brand_id: brandId },
@@ -98,14 +95,12 @@ async function updateBrand(req, res, next) {
 
     const newSlug = slug ? slugify(slug) : (brand_name ? slugify(brand_name) : existing.slug);
     const newName = brand_name ? brand_name.trim() : existing.brand_name;
-    const newLogo = logo_url !== undefined ? logo_url : existing.logo_url;
 
     await prisma.brand.update({
       where: { brand_id: brandId },
       data: {
         brand_name: newName,
         slug: newSlug,
-        logo_url: newLogo,
       },
     });
 

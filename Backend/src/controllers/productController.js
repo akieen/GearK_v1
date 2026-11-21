@@ -179,7 +179,7 @@ async function getProductBySlug(req, res, next) {
           select: { category_name: true, slug: true },
         },
         brand: {
-          select: { brand_name: true, slug: true, logo_url: true },
+          select: { brand_name: true, slug: true },
         },
         variants: {
           orderBy: { price: 'asc' },
@@ -242,7 +242,6 @@ async function getProductBySlug(req, res, next) {
       category_slug: product.category?.slug || null,
       brand_name: product.brand?.brand_name || null,
       brand_slug: product.brand?.slug || null,
-      brand_logo: product.brand?.logo_url || null,
       avg_rating,
       review_count,
       images: product.images,

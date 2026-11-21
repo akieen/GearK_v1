@@ -18,6 +18,7 @@ import { OrderSuccessPage } from './pages/OrderSuccessPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
 import { WishlistPage } from './pages/WishlistPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { VNPayReturnPage } from './pages/VNPayReturnPage';
 
@@ -64,6 +65,8 @@ const parseRoute = (path) => {
   } else if (cleanPath === 'admin' || cleanPath.startsWith('admin/')) {
     const adminTab = cleanPath.replace(/^admin\/?/, '').trim();
     return { route: 'admin', params: { adminTab, ...params } };
+  } else if (cleanPath === 'change-password' || cleanPath === 'doi-mat-khau') {
+    return { route: 'change-password', params };
   }
 
   return { route: cleanPath || 'home', params };
@@ -232,6 +235,10 @@ function AppContent() {
 
         {currentRoute === 'profile' && (
           <ProfilePage onNavigate={navigate} />
+        )}
+
+        {currentRoute === 'change-password' && (
+          <ChangePasswordPage onNavigate={navigate} />
         )}
 
         {currentRoute === 'admin' && (

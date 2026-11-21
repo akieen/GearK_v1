@@ -4,6 +4,7 @@ import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
+import VerifiedIcon from '@mui/icons-material/Verified';
 import { SectionTitle } from '../ui/SectionTitle';
 
 export const BrandShowcase = ({ brands = [], onNavigate }) => {
@@ -22,12 +23,13 @@ export const BrandShowcase = ({ brands = [], onNavigate }) => {
                 elevation={1}
                 onClick={() => onNavigate(`products?brand=${brand.slug}`)}
                 sx={{
-                  p: 2,
+                  p: 2.25,
+                  minHeight: 80,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 1.25,
+                  gap: 0.75,
                   cursor: 'pointer',
                   borderRadius: 2.5,
                   border: '1px solid #E5E7EB',
@@ -35,33 +37,38 @@ export const BrandShowcase = ({ brands = [], onNavigate }) => {
                   transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                   '&:hover': {
                     transform: 'translateY(-3px)',
-                    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.08)',
+                    boxShadow: '0 8px 20px rgba(227, 0, 25, 0.12)',
                     borderColor: 'primary.main',
+                    bgcolor: '#FEF2F2',
                   },
                 }}
               >
-                <Box
-                  component="img"
-                  src={
-                    brand.logo_url ||
-                    'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=300&q=80'
-                  }
-                  alt={brand.brand_name}
-                  sx={{
-                    width: '100%',
-                    height: 48,
-                    objectFit: 'contain',
-                  }}
-                />
+                <VerifiedIcon sx={{ fontSize: 20, color: 'primary.main' }} />
                 <Typography
-                  variant="caption"
+                  variant="subtitle2"
                   sx={{
-                    fontWeight: 800,
+                    fontWeight: 900,
+                    fontSize: 13.5,
                     color: 'text.primary',
                     textAlign: 'center',
+                    letterSpacing: 0.2,
                   }}
                 >
                   {brand.brand_name}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    bgcolor: '#F1F5F9',
+                    px: 1,
+                    py: 0.2,
+                    borderRadius: 1,
+                  }}
+                >
+                  Chính hãng
                 </Typography>
               </Paper>
             </Grid>
