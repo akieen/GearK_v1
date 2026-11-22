@@ -109,6 +109,9 @@ model Address {
   recipient_name  String   @db.VarChar(150)
   recipient_phone String   @db.VarChar(20)
   street_address  String   @db.VarChar(500)
+  province_id     Int?     @db.UnsignedInt
+  district_id     Int?     @db.UnsignedInt
+  ward_code       String?  @db.VarChar(50)
   created_at      DateTime @default(now()) @db.Timestamp(0)
   updated_at      DateTime @default(now()) @updatedAt @db.Timestamp(0)
 
@@ -252,6 +255,7 @@ model ProductVariant {
   price           Decimal  @db.Decimal(15, 2)
   sale_price      Decimal? @db.Decimal(15, 2)
   stock           Int      @default(0)
+  weight          Int?     @default(500) @db.UnsignedInt
   warranty_months Int      @default(0) @db.UnsignedInt
   created_at      DateTime @default(now()) @db.Timestamp(0)
   updated_at      DateTime @default(now()) @updatedAt @db.Timestamp(0)
@@ -283,15 +287,20 @@ model VariantImage {
 }
 
 model Order {
-  order_id       BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
-  user_id        BigInt        @db.UnsignedBigInt
-  address_id     BigInt?       @db.UnsignedBigInt
-  order_code     String        @unique(map: "uq_orders_code") @db.VarChar(50)
-  total_amount   Decimal       @default(0.00) @db.Decimal(15, 2)
-  order_status   OrderStatus   @default(pending)
-  payment_status PaymentStatus @default(unpaid)
-  created_at     DateTime      @default(now()) @db.Timestamp(0)
-  updated_at     DateTime      @default(now()) @updatedAt @db.Timestamp(0)
+  order_id              BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id               BigInt        @db.UnsignedBigInt
+  address_id            BigInt?       @db.UnsignedBigInt
+  order_code            String        @unique(map: "uq_orders_code") @db.VarChar(50)
+  total_amount          Decimal       @default(0.00) @db.Decimal(15, 2)
+  shipping_fee          Decimal       @default(0.00) @db.Decimal(15, 2)
+  shipping_service_id   Int?          @db.UnsignedInt
+  shipping_service_name String?       @db.VarChar(100)
+  tracking_code         String?       @db.VarChar(100)
+  shipping_status       String?       @db.VarChar(50)
+  order_status          OrderStatus   @default(pending)
+  payment_status        PaymentStatus @default(unpaid)
+  created_at            DateTime      @default(now()) @db.Timestamp(0)
+  updated_at            DateTime      @default(now()) @updatedAt @db.Timestamp(0)
 
   user               User                 @relation(fields: [user_id], references: [user_id], onUpdate: Cascade, map: "fk_orders_user")
   address            Address?             @relation(fields: [address_id], references: [address_id], onDelete: SetNull, onUpdate: Cascade, map: "fk_orders_address")
@@ -301,6 +310,7 @@ model Order {
   status_history     OrderStatusHistory[]
   vnpay_transactions VNPayTransaction[]
   warranty_claims    WarrantyClaim[]
+  shipments          Shipment[]
 
   @@index([user_id], map: "idx_orders_user")
   @@index([address_id], map: "idx_orders_address")
@@ -535,4 +545,56 @@ model WishlistItem {
   @@unique([wishlist_id, variant_id], map: "uq_wishlist_variant")
   @@index([variant_id], map: "idx_wishlist_items_variant")
   @@map("wishlist_items")
+}
+
+model Shipment {
+  shipment_id          BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  order_id             BigInt             @db.UnsignedBigInt
+  tracking_code        String             @unique(map: "uq_shipments_tracking") @db.VarChar(100)
+  provider             String             @default("GHN") @db.VarChar(50)
+  service_id           Int?               @db.UnsignedInt
+  service_name         String?            @db.VarChar(100)
+  shipping_fee         Decimal            @default(0.00) @db.Decimal(15, 2)
+  cod_amount           Decimal            @default(0.00) @db.Decimal(15, 2)
+  insurance_value      Decimal            @default(0.00) @db.Decimal(15, 2)
+  status               String             @default("ready_to_pick") @db.VarChar(50)
+  expected_delivery_at DateTime?          @db.Timestamp(0)
+  raw_response         String?            @db.LongText
+  created_at           DateTime           @default(now()) @db.Timestamp(0)
+  updated_at           DateTime           @default(now()) @updatedAt @db.Timestamp(0)
+
+  order     Order             @relation(fields: [order_id], references: [order_id], onDelete: Cascade, onUpdate: Cascade)
+  histories ShipmentHistory[]
+
+  @@index([order_id], map: "idx_shipments_order")
+  @@index([status], map: "idx_shipments_status")
+  @@map("shipments")
+}
+
+model ShipmentHistory {
+  history_id  BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  shipment_id BigInt   @db.UnsignedBigInt
+  status      String   @db.VarChar(50)
+  ghn_status  String?  @db.VarChar(50)
+  location    String?  @db.VarChar(255)
+  note        String?  @db.Text
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+
+  shipment Shipment @relation(fields: [shipment_id], references: [shipment_id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([shipment_id], map: "idx_shipment_histories_shipment")
+  @@map("shipment_histories")
+}
+
+model ShippingWebhookLog {
+  log_id     BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  provider   String   @default("GHN") @db.VarChar(50)
+  order_code String?  @db.VarChar(100)
+  event_type String?  @db.VarChar(100)
+  payload    String?  @db.LongText
+  status     String   @default("processed") @db.VarChar(50)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([order_code], map: "idx_shipping_webhook_order")
+  @@map("shipping_webhook_logs")
 }

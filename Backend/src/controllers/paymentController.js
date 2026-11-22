@@ -31,6 +31,9 @@ const createPayment = async (req, res, next) => {
       coupon_code,
       items,
       notes,
+      shipping_fee,
+      shipping_service_id,
+      shipping_service_name,
       language,
     } = req.body;
 
@@ -52,6 +55,9 @@ const createPayment = async (req, res, next) => {
       coupon_code,
       items,
       notes,
+      shipping_fee: shipping_fee || 0,
+      shipping_service_id: shipping_service_id || null,
+      shipping_service_name: shipping_service_name || 'Giao Hàng Nhanh',
     };
 
     await prisma.vNPayTransaction.upsert({
@@ -261,6 +267,9 @@ const vnpayReturn = async (req, res, next) => {
             payment_status: 'paid',
             paid_at: new Date(),
             order_status: 'confirmed',
+            shipping_fee: orderData.shipping_fee || 0,
+            shipping_service_id: orderData.shipping_service_id || null,
+            shipping_service_name: orderData.shipping_service_name || 'Giao Hàng Nhanh',
           });
 
           await prismaTx.vNPayTransaction.update({

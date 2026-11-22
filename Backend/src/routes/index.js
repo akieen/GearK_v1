@@ -17,6 +17,7 @@ const uploadRoutes = require('./uploadRoutes');
 const inventoryRoutes = require('./inventoryRoutes');
 const paymentRoutes = require('./paymentRoutes');
 const warrantyRoutes = require('./warrantyRoutes');
+const shippingRoutes = require('./shippingRoutes');
 const paymentController = require('../controllers/paymentController');
 
 // API Health Check & Database connection status
@@ -60,5 +61,6 @@ router.use('/upload', uploadRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/payment', paymentRoutes);
 router.use('/warranties', warrantyRoutes);
+router.use('/shipping', shippingRoutes);
 
 module.exports = router;

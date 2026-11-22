@@ -270,7 +270,7 @@ export const MyOrdersPage = ({ onNavigate }) => {
                           gap: 1.5,
                         }}
                       >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                           <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                             Mã đơn: <span style={{ color: '#E30019' }}>#{order.order_code}</span>
                           </Typography>
@@ -278,6 +278,20 @@ export const MyOrdersPage = ({ onNavigate }) => {
                           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                             Ngày đặt: {formatDate(order.created_at)}
                           </Typography>
+                          {order.tracking_code && (
+                            <Chip
+                              label={`Vận đơn GHN: ${order.tracking_code}`}
+                              size="small"
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: 11,
+                                height: 22,
+                                bgcolor: '#FEF2F2',
+                                color: '#E30019',
+                                border: '1px solid #FECACA',
+                              }}
+                            />
+                          )}
                         </Box>
 
                         <StatusBadge status={statusInfo.label} />
@@ -377,13 +391,18 @@ export const MyOrdersPage = ({ onNavigate }) => {
 
                       {/* Order Footer & Actions */}
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
                           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                             Tổng thanh toán:
                           </Typography>
                           <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>
                             {formatPrice(order.total_amount)}
                           </Typography>
+                          {order.shipping_fee > 0 && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              (Gồm {formatPrice(order.shipping_fee)} phí ship GHN)
+                            </Typography>
+                          )}
                         </Box>
 
                         <Stack direction="row" spacing={1.5}>

@@ -9,6 +9,7 @@
     "seed": "node src/seeds/seedData.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "test:webhook": "node test_webhook.js",
     "postinstall": "prisma generate"
   },
   "keywords": [

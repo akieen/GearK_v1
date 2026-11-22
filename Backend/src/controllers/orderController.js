@@ -15,6 +15,9 @@ async function executeOrderCreation(tx, {
   payment_status = 'unpaid',
   paid_at = null,
   order_status = null,
+  shipping_fee = 0,
+  shipping_service_id = null,
+  shipping_service_name = null,
 }) {
   const parsedUserId = BigInt(userId);
 
@@ -158,7 +161,8 @@ async function executeOrderCreation(tx, {
     }
   }
 
-  const totalAmount = Math.max(0, subtotal - discountAmount);
+  const numericShippingFee = Math.max(0, Number(shipping_fee) || 0);
+  const totalAmount = Math.max(0, subtotal + numericShippingFee - discountAmount);
   const orderCode = generateOrderCode();
   const finalOrderStatus = order_status || (payment_status === 'paid' ? 'confirmed' : 'pending');
 
@@ -169,6 +173,10 @@ async function executeOrderCreation(tx, {
       address_id: finalAddressId,
       order_code: orderCode,
       total_amount: totalAmount,
+      shipping_fee: numericShippingFee,
+      shipping_service_id: shipping_service_id ? parseInt(shipping_service_id, 10) : null,
+      shipping_service_name: shipping_service_name || 'Giao Hàng Nhanh',
+      shipping_status: 'PENDING',
       order_status: finalOrderStatus,
       payment_status,
     },
@@ -261,6 +269,9 @@ async function executeOrderCreation(tx, {
     order_id: orderId,
     order_code: orderCode,
     total_amount: totalAmount,
+    shipping_fee: numericShippingFee,
+    shipping_service_id,
+    shipping_service_name,
     discount_amount: discountAmount,
     order_status: finalOrderStatus,
     payment_status,
@@ -293,6 +304,9 @@ async function createOrder(req, res, next) {
         coupon_code: req.body.coupon_code,
         items: req.body.items,
         payment_status: 'unpaid',
+        shipping_fee: req.body.shipping_fee || 0,
+        shipping_service_id: req.body.shipping_service_id || null,
+        shipping_service_name: req.body.shipping_service_name || 'Giao Hàng Nhanh',
       });
     });
 
@@ -379,6 +393,11 @@ async function getUserOrders(req, res, next) {
         address_id: o.address_id,
         order_code: o.order_code,
         total_amount: o.total_amount,
+        shipping_fee: o.shipping_fee,
+        shipping_service_id: o.shipping_service_id,
+        shipping_service_name: o.shipping_service_name,
+        tracking_code: o.tracking_code,
+        shipping_status: o.shipping_status,
         order_status: o.order_status,
         payment_status: o.payment_status,
         created_at: o.created_at,
@@ -440,6 +459,12 @@ async function getOrderDetail(req, res, next) {
         coupons: {
           include: { coupon: { select: { coupon_code: true } } },
         },
+        shipments: {
+          include: {
+            histories: { orderBy: { created_at: 'desc' } },
+          },
+          orderBy: { created_at: 'desc' },
+        },
       },
     });
 
@@ -485,6 +510,11 @@ async function getOrderDetail(req, res, next) {
       address_id: order.address_id,
       order_code: order.order_code,
       total_amount: order.total_amount,
+      shipping_fee: order.shipping_fee,
+      shipping_service_id: order.shipping_service_id,
+      shipping_service_name: order.shipping_service_name,
+      tracking_code: order.tracking_code,
+      shipping_status: order.shipping_status,
       order_status: order.order_status,
       payment_status: order.payment_status,
       created_at: order.created_at,
@@ -498,6 +528,7 @@ async function getOrderDetail(req, res, next) {
       payments: order.payments,
       history,
       coupons: couponData,
+      shipments: order.shipments || [],
     };
 
     return successResponse(res, result, 'Chi tiết đơn hàng');
@@ -573,6 +604,11 @@ async function getAllOrders(req, res, next) {
       recipient_phone: o.address?.recipient_phone || '',
       shipping_address: o.address?.street_address || '',
       street_address: o.address?.street_address || '',
+      shipping_fee: o.shipping_fee,
+      shipping_service_id: o.shipping_service_id,
+      shipping_service_name: o.shipping_service_name,
+      tracking_code: o.tracking_code,
+      shipping_status: o.shipping_status,
       payment_method: o.payments[0]?.payment_method || 'COD',
     }));
 

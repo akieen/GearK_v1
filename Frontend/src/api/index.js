@@ -5,3 +5,4 @@ export * from './categoryApi';
 export * from './cartApi';
 export * from './extraApi';
 export * from './paymentApi';
+export * from './shippingApi';

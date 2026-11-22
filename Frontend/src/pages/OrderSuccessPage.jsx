@@ -207,6 +207,32 @@ export const OrderSuccessPage = ({ orderData, orderCode, onNavigate }) => {
                     </Box>
                   </Box>
 
+                  {/* Vận chuyển GHN & Mã vận đơn */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                      Vận chuyển (GHN):
+                    </Typography>
+                    <Box sx={{ textAlign: 'right' }}>
+                      {activeOrder?.tracking_code ? (
+                        <Chip
+                          icon={<LocalShippingOutlinedIcon sx={{ fontSize: '13px !important' }} />}
+                          label={`Mã vận đơn: ${activeOrder.tracking_code}`}
+                          size="small"
+                          sx={{
+                            fontWeight: 800,
+                            fontSize: 11,
+                            bgcolor: '#FEF2F2',
+                            color: '#E30019',
+                          }}
+                        />
+                      ) : (
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                          Giao Hàng Nhanh (Đang xử lý xuất kho)
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+
                   {/* Thông tin người nhận & Địa chỉ */}
                   {(activeOrder?.recipient_name || activeOrder?.street_address) && (
                     <Box sx={{ pt: 0.5 }}>
@@ -265,6 +291,16 @@ export const OrderSuccessPage = ({ orderData, orderCode, onNavigate }) => {
                       </Stack>
                     </Box>
                   )}
+
+                  {/* Phí vận chuyển */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      Phí vận chuyển (GHN):
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {activeOrder?.shipping_fee ? formatPrice(activeOrder.shipping_fee) : '0 ₫ (Miễn phí)'}
+                    </Typography>
+                  </Box>
 
                   {/* Tổng thanh toán */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 0.5 }}>
