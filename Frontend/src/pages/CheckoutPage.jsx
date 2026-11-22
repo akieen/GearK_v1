@@ -20,7 +20,6 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import AddLocationAltIcon from '@mui/icons-material/AddLocationAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -28,7 +27,6 @@ import { useToast } from '../context/ToastContext';
 import { addressApi, couponApi } from '../api/extraApi';
 import { orderApi } from '../api/cartApi';
 import { paymentApi } from '../api/paymentApi';
-import shippingApi from '../api/shippingApi';
 import { formatPrice } from '../utils/formatters';
 import { AppDialog } from '../components/ui/AppDialog';
 import { AppButton } from '../components/ui/AppButton';
@@ -50,13 +48,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   const [newWard, setNewWard] = useState(null);
   const [newDetailAddress, setNewDetailAddress] = useState('');
   const [savingAddress, setSavingAddress] = useState(false);
-
-  // GHN Shipping states
-  const [shippingFee, setShippingFee] = useState(0);
-  const [shippingServiceId, setShippingServiceId] = useState(53320);
-  const [shippingServiceName, setShippingServiceName] = useState('Giao Hàng Nhanh (Tiêu chuẩn)');
-  const [expectedDelivery, setExpectedDelivery] = useState(null);
-  const [calculatingShipping, setCalculatingShipping] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [orderNotes, setOrderNotes] = useState('');
@@ -109,58 +100,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
     loadAddresses();
   }, [user]);
 
-  // Tự động tính phí vận chuyển GHN khi thay đổi địa chỉ hoặc giỏ hàng
-  useEffect(() => {
-    if (!selectedAddressId || !cart.items || cart.items.length === 0) {
-      setShippingFee(0);
-      return;
-    }
-
-    const currentAddr = addresses.find((a) => a.address_id === selectedAddressId);
-    if (!currentAddr) return;
-
-    let isCancelled = false;
-    const fetchShippingFee = async () => {
-      setCalculatingShipping(true);
-      try {
-        const res = await shippingApi.calculateFee({
-          to_district_id: currentAddr.district_id || 1442,
-          to_ward_code: currentAddr.ward_code || '',
-          items: cart.items.map((it) => ({
-            variant_id: it.variant_id,
-            quantity: it.quantity,
-          })),
-        });
-
-        if (!isCancelled && res.success && res.data) {
-          setShippingFee(res.data.total_fee || 0);
-          setExpectedDelivery(res.data.expected_delivery || null);
-          setShippingServiceId(53320);
-          setShippingServiceName(
-            res.data.is_estimated
-              ? 'Giao Hàng Nhanh (Ước lượng)'
-              : 'Giao Hàng Nhanh (Tiêu chuẩn)'
-          );
-        }
-      } catch (err) {
-        console.warn('Lỗi tính phí ship GHN:', err);
-        if (!isCancelled) {
-          setShippingFee(30000); // Mức cước cơ bản fallback
-        }
-      } finally {
-        if (!isCancelled) {
-          setCalculatingShipping(false);
-        }
-      }
-    };
-
-    fetchShippingFee();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [selectedAddressId, addresses, cart.items]);
-
   const handleAddNewAddress = async (e) => {
     e.preventDefault();
     if (!newRecipientName || !newRecipientPhone || !newProvince || !newWard || !newDetailAddress) {
@@ -180,9 +119,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
         recipient_name: newRecipientName.trim(),
         recipient_phone: newRecipientPhone.trim(),
         street_address: fullStreetAddress,
-        province_id: newProvince?.code || newProvince?.province_id,
-        district_id: newProvince?.district_id || newProvince?.code || 1442,
-        ward_code: newWard?.code || newWard?.ward_code,
         is_default: addresses.length === 0,
       });
       if (res.success && res.data) {
@@ -223,7 +159,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
   };
 
   const discountAmount = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
-  const finalTotal = Math.max(0, cartTotal + shippingFee - discountAmount);
+  const finalTotal = Math.max(0, cartTotal - discountAmount);
   const selectedAddress = addresses.find((a) => a.address_id === selectedAddressId);
 
   const handleOpenConfirmModal = () => {
@@ -250,9 +186,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
           street_address: selectedAddress?.street_address,
           coupon_code: appliedCoupon ? appliedCoupon.coupon_code : undefined,
           notes: orderNotes.trim(),
-          shipping_fee: shippingFee,
-          shipping_service_id: shippingServiceId,
-          shipping_service_name: shippingServiceName,
           items: cart.items.map((it) => ({
             variant_id: it.variant_id,
             quantity: it.quantity,
@@ -279,9 +212,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
         payment_method: paymentMethod,
         notes: orderNotes.trim(),
         coupon_code: appliedCoupon ? appliedCoupon.coupon_code : undefined,
-        shipping_fee: shippingFee,
-        shipping_service_id: shippingServiceId,
-        shipping_service_name: shippingServiceName,
         items: cart.items.map((it) => ({
           variant_id: it.variant_id,
           quantity: it.quantity,
@@ -442,65 +372,12 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                 )}
               </Paper>
 
-              {/* Section 2: Shipping Method (GHN) */}
-              <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <LocalShippingIcon sx={{ color: 'primary.main', fontSize: 22 }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                    2. Phương thức vận chuyển (Giao Hàng Nhanh - GHN)
-                  </Typography>
-                </Box>
-
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    border: '2px solid #E30019',
-                    backgroundColor: '#FEF2F2',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Radio checked color="primary" sx={{ p: 0.5 }} />
-                    <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                          {shippingServiceName}
-                        </Typography>
-                        <Chip
-                          label="Chính hãng GHN"
-                          size="small"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.625rem',
-                            fontWeight: 800,
-                            backgroundColor: '#E30019',
-                            color: '#FFFFFF',
-                          }}
-                        />
-                      </Box>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-                        {expectedDelivery
-                          ? `Dự kiến giao hàng: ${new Date(expectedDelivery).toLocaleDateString('vi-VN')}`
-                          : 'Thời gian giao hàng tiêu chuẩn: 2 - 3 ngày làm việc'}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 900, color: '#E30019' }}>
-                    {calculatingShipping ? 'Đang tính...' : formatPrice(shippingFee)}
-                  </Typography>
-                </Paper>
-              </Paper>
-
-              {/* Section 3: Payment Method */}
+              {/* Section 2: Payment Method */}
               <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <PaymentIcon sx={{ color: 'primary.main', fontSize: 22 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                    3. Phương thức thanh toán
+                    2. Phương thức thanh toán
                   </Typography>
                 </Box>
 
@@ -630,12 +507,12 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                 )}
               </Paper>
 
-              {/* Section 4: Notes */}
+              {/* Section 3: Notes */}
               <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                   <EditNoteIcon sx={{ color: 'primary.main', fontSize: 22 }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                    4. Ghi chú giao hàng
+                    3. Ghi chú giao hàng
                   </Typography>
                 </Box>
                 <TextField
@@ -716,16 +593,9 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
                     <Typography variant="body2" sx={{ fontWeight: 800 }}>-{formatPrice(discountAmount)}</Typography>
                   </Box>
                 )}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Phí vận chuyển (GHN):</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>
-                      {shippingServiceName}
-                    </Typography>
-                  </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 800, color: shippingFee > 0 ? 'text.primary' : 'success.main' }}>
-                    {calculatingShipping ? 'Đang tính...' : shippingFee > 0 ? formatPrice(shippingFee) : '0₫ (Miễn phí)'}
-                  </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>Phí vận chuyển:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800, color: 'success.main' }}>0₫ (Miễn phí)</Typography>
                 </Box>
                 <Divider />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -811,10 +681,6 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography variant="body2" sx={{ color: '#4B5563' }}>Tạm tính:</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatPrice(cartTotal)}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="body2" sx={{ color: '#4B5563' }}>Phí vận chuyển (GHN):</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatPrice(shippingFee)}</Typography>
               </Box>
               {discountAmount > 0 && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, color: '#059669' }}>
