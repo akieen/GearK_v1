@@ -115,6 +115,52 @@ async function sendOtpMail({ to, fullName, otpCode, expiresInMinutes = 10 }) {
 }
 
 /**
+ * Gửi email mã OTP khôi phục mật khẩu tài khoản
+ */
+async function sendPasswordResetOtpMail({ to, fullName, otpCode, expiresInMinutes = 10 }) {
+  const subject = `[GearK] Mã OTP khôi phục mật khẩu: ${otpCode}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+      <div style="background-color: #0f172a; padding: 24px; text-align: center;">
+        <h1 style="color: #38bdf8; margin: 0; font-size: 24px; letter-spacing: 1px;">GEARK GAMING STORE</h1>
+        <p style="color: #94a3b8; margin: 8px 0 0 0; font-size: 13px;">Khôi phục mật khẩu tài khoản</p>
+      </div>
+
+      <div style="padding: 30px 24px;">
+        <p style="font-size: 15px; color: #1e293b; margin-top: 0;">Xin chào <strong>${fullName || 'Quý khách'}</strong>,</p>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+          Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản <strong>${to}</strong> tại <strong>GearK</strong>. Vui lòng sử dụng mã xác thực (OTP) bên dưới để thiết lập mật khẩu mới:
+        </p>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <div style="display: inline-block; background-color: #fef2f2; border: 2px dashed #e30019; border-radius: 8px; padding: 14px 32px;">
+            <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #e30019; font-family: 'Courier New', Courier, monospace;">${otpCode}</span>
+          </div>
+          <p style="font-size: 12px; color: #64748b; margin-top: 8px;">
+            (Mã OTP có hiệu lực trong vòng <strong>${expiresInMinutes} phút</strong>)
+          </p>
+        </div>
+
+        <p style="font-size: 13px; color: #b91c1c; line-height: 1.6;">
+          <strong>Cảnh báo bảo mật:</strong> Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email và tuyệt đối KHÔNG chia sẻ mã OTP cho bất kỳ ai để bảo vệ tài khoản của bạn.
+        </p>
+      </div>
+
+      <div style="background-color: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8;">
+        © 2026 GearK Store. Mọi thắc mắc xin vui lòng liên hệ hotline hỗ trợ hoặc phản hồi email này.
+      </div>
+    </div>
+  `;
+
+  return sendMail({
+    to,
+    subject,
+    text: `Mã OTP khôi phục mật khẩu tài khoản GearK của bạn là: ${otpCode}. Mã có hiệu lực trong ${expiresInMinutes} phút. Nếu bạn không yêu cầu, vui lòng bỏ qua email này.`,
+    html,
+  });
+}
+
+/**
  * Gửi email thông báo đặt hàng thành công, chi tiết sản phẩm và chính sách bảo hành
  */
 async function sendOrderSuccessMail({
@@ -267,6 +313,7 @@ async function sendOrderSuccessMail({
 module.exports = {
   sendMail,
   sendOtpMail,
+  sendPasswordResetOtpMail,
   sendOrderSuccessMail,
 };
 

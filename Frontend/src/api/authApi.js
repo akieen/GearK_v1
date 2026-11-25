@@ -31,6 +31,30 @@ export const authApi = {
       body: JSON.stringify({ email }),
     }),
 
+  forgotPassword: (email) =>
+    request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyResetOtp: (email, otp) =>
+    request('/auth/verify-reset-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    }),
+
+  resendResetOtp: (email) =>
+    request('/auth/resend-reset-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (email, otp, new_password) =>
+    request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp, new_password }),
+    }),
+
   getProfile: () => request('/auth/profile'),
 
   updateProfile: (data) =>

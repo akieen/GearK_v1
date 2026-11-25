@@ -126,6 +126,61 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const forgotPassword = async (email) => {
+    try {
+      const res = await authApi.forgotPassword(email);
+      if (res.success) {
+        toast.info(res.message || 'Mã OTP đặt lại mật khẩu đã được gửi đến email của bạn.');
+        return { success: true, email: res.data?.email || email };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Kiểm tra email thất bại');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const verifyResetOtp = async (email, otp) => {
+    try {
+      const res = await authApi.verifyResetOtp(email, otp);
+      if (res.success) {
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Xác thực OTP không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const resendResetOtp = async (email) => {
+    try {
+      const res = await authApi.resendResetOtp(email);
+      if (res.success) {
+        toast.success('Đã gửi lại mã OTP mới đến email của bạn!');
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Gửi lại OTP không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const resetPassword = async (email, otp, newPassword) => {
+    try {
+      const res = await authApi.resetPassword(email, otp, newPassword);
+      if (res.success) {
+        toast.success(res.message || 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.');
+        return { success: true };
+      }
+      return { success: false, message: res.message };
+    } catch (err) {
+      toast.error(err.message || 'Đặt lại mật khẩu không thành công');
+      return { success: false, message: err.message };
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -172,6 +227,10 @@ export const AuthProvider = ({ children }) => {
         register,
         verifyOtp,
         resendOtp,
+        forgotPassword,
+        verifyResetOtp,
+        resendResetOtp,
+        resetPassword,
         logout,
         quickLogin,
         authModalOpen,

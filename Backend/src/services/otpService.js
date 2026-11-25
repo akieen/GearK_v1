@@ -1,7 +1,10 @@
 const prisma = require('../config/prisma');
 
-// Bộ nhớ tạm thời lưu mã OTP: Map<email, { otp, expiresAt, full_name, password_hash, role } >
+// Bộ nhớ tạm thời lưu mã OTP đăng ký: Map<email, { otp, expiresAt, full_name, password_hash, role } >
 const otpStore = new Map();
+
+// Bộ nhớ tạm thời lưu mã OTP khôi phục mật khẩu: Map<email, { otp, expiresAt, email } >
+const resetPasswordOtpStore = new Map();
 
 /**
  * Sinh mã OTP ngẫu nhiên 6 chữ số
@@ -30,7 +33,63 @@ function saveRegistrationOtp({ email, full_name, password_hash, role = 'customer
 }
 
 /**
- * Xác minh mã OTP
+ * Lưu mã OTP đặt lại mật khẩu tạm thời (hiệu lực 10 phút)
+ */
+function savePasswordResetOtp({ email }) {
+  const cleanEmail = email.trim().toLowerCase();
+  const otp = generateOtpCode();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 phút
+
+  resetPasswordOtpStore.set(cleanEmail, {
+    otp,
+    expiresAt,
+    email: cleanEmail,
+  });
+
+  return { otp, expiresAt };
+}
+
+/**
+ * Xác minh mã OTP đặt lại mật khẩu
+ */
+function verifyPasswordResetOtp(email, inputOtp) {
+  const cleanEmail = email.trim().toLowerCase();
+  const record = resetPasswordOtpStore.get(cleanEmail);
+
+  if (!record) {
+    return { valid: false, message: 'Yêu cầu đặt lại mật khẩu không tồn tại hoặc đã hết hạn. Vui lòng thử lại!' };
+  }
+
+  if (Date.now() > record.expiresAt) {
+    resetPasswordOtpStore.delete(cleanEmail);
+    return { valid: false, message: 'Mã OTP đã hết hạn, vui lòng yêu cầu gửi lại mã mới' };
+  }
+
+  if (record.otp !== inputOtp.toString().trim()) {
+    return { valid: false, message: 'Mã OTP không chính xác, vui lòng thử lại' };
+  }
+
+  return { valid: true, data: { email: cleanEmail } };
+}
+
+/**
+ * Xóa mã OTP đặt lại mật khẩu sau khi hoàn tất
+ */
+function clearPasswordResetOtp(email) {
+  const cleanEmail = email.trim().toLowerCase();
+  resetPasswordOtpStore.delete(cleanEmail);
+}
+
+/**
+ * Lấy thông tin OTP đặt lại mật khẩu hiện tại (phục vụ resend)
+ */
+function getPasswordResetOtpRecord(email) {
+  const cleanEmail = email.trim().toLowerCase();
+  return resetPasswordOtpStore.get(cleanEmail) || null;
+}
+
+/**
+ * Xác minh mã OTP đăng ký tài khoản
  */
 function verifyOtp(email, inputOtp) {
   const cleanEmail = email.trim().toLowerCase();
@@ -75,5 +134,9 @@ module.exports = {
   saveRegistrationOtp,
   verifyOtp,
   getOtpRecord,
+  savePasswordResetOtp,
+  verifyPasswordResetOtp,
+  clearPasswordResetOtp,
+  getPasswordResetOtpRecord,
 };
 
