@@ -57,7 +57,7 @@ export const AppInput = React.forwardRef(function AppInput(
         }}
         sx={{
           '& .MuiOutlinedInput-root': {
-            borderRadius: 2,
+            borderRadius: 0,
             backgroundColor: '#FFFFFF',
             fontSize: '0.875rem',
           },

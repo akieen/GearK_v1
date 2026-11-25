@@ -157,8 +157,8 @@ export const ProfilePage = ({ onNavigate }) => {
 
         <Grid container spacing={3.5}>
           {/* Left: 1 khung duy nhất cho User Profile Form */}
-          <Grid item xs={12} md={5}>
-            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 0, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                 <Avatar
                   sx={{
@@ -178,24 +178,13 @@ export const ProfilePage = ({ onNavigate }) => {
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     {user.email}
                   </Typography>
-                  <Chip
-                    label={`Vai trò: ${user.role}`}
-                    size="small"
-                    sx={{
-                      height: 20,
-                      fontSize: '0.6875rem',
-                      fontWeight: 800,
-                      backgroundColor: '#FEE2E2',
-                      color: 'primary.main',
-                      mt: 0.5,
-                    }}
-                  />
+
                 </Box>
               </Box>
 
               <Box component="form" onSubmit={handleUpdateProfile}>
                 <AppInput
-                  topLabel="Họ và tên *"
+                  topLabel="Họ và tên"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
@@ -222,8 +211,8 @@ export const ProfilePage = ({ onNavigate }) => {
           </Grid>
 
           {/* Right: Address Book */}
-          <Grid item xs={12} md={7}>
-            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Paper elevation={1} sx={{ p: 3.5, borderRadius: 0, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
                 <LocationOnIcon sx={{ color: 'primary.main', fontSize: 24 }} />
                 <Typography variant="h6" sx={{ fontWeight: 900 }}>
@@ -296,7 +285,7 @@ export const ProfilePage = ({ onNavigate }) => {
 
               <Box component="form" onSubmit={handleAddAddress}>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <AppInput
                       topLabel="Họ tên người nhận *"
                       placeholder="Nguyễn Văn Khách"
@@ -305,7 +294,7 @@ export const ProfilePage = ({ onNavigate }) => {
                       required
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <AppInput
                       topLabel="Số điện thoại *"
                       placeholder="0987654321"

@@ -175,7 +175,7 @@ export const ProductsPage = ({
             >
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 <Typography variant="subtitle1" component="span" sx={{ fontWeight: 800, fontSize: '0.9375rem' }}>
-                  {activeCategoryObj ? activeCategoryObj.category_name : 'Tất cả Gaming Gear'}
+                  {activeCategoryObj ? activeCategoryObj.category_name : 'Tất cả Sản Phẩm'}
                 </Typography>
                 <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
                   ({pagination.total || products.length} sản phẩm)

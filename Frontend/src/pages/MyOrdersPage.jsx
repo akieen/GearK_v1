@@ -168,7 +168,7 @@ export const MyOrdersPage = ({ onNavigate }) => {
       <Container maxWidth="lg">
         {/* Header with Navigation Pills */}
         <Box sx={{ mb: 4, pb: 2, borderBottom: '2px solid #E5E7EB' }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 900, textTransform: 'uppercase', color: 'text.primary' }}>
                 Quản lý mua sắm & Bảo hành
@@ -179,50 +179,31 @@ export const MyOrdersPage = ({ onNavigate }) => {
             </Box>
 
             {/* Sub-tab Switcher */}
-            <Stack direction="row" spacing={1} sx={{ bgcolor: '#F1F5F9', p: 0.6, borderRadius: 3 }}>
-              <Button
-                variant={activeTab === 'orders' ? 'contained' : 'text'}
-                size="small"
-                onClick={() => setActiveTab('orders')}
-                sx={{
-                  fontWeight: 700,
-                  fontSize: 13,
-                  textTransform: 'none',
-                  borderRadius: 2.5,
-                  px: 2,
-                  py: 0.75,
-                  bgcolor: activeTab === 'orders' ? '#DC2626' : 'transparent',
-                  color: activeTab === 'orders' ? '#FFFFFF' : '#475569',
-                  boxShadow: activeTab === 'orders' ? '0 2px 6px rgba(220, 38, 38, 0.3)' : 'none',
-                  '&:hover': {
-                    bgcolor: activeTab === 'orders' ? '#B91C1C' : '#E2E8F0',
-                  },
-                }}
-              >
-                Đơn hàng ({orders.length})
-              </Button>
-
-              <Button
-                variant={activeTab === 'warranties' ? 'contained' : 'text'}
-                size="small"
-                onClick={() => setActiveTab('warranties')}
-                sx={{
-                  fontWeight: 700,
-                  fontSize: 13,
-                  textTransform: 'none',
-                  borderRadius: 2.5,
-                  px: 2,
-                  py: 0.75,
-                  bgcolor: activeTab === 'warranties' ? '#DC2626' : 'transparent',
-                  color: activeTab === 'warranties' ? '#FFFFFF' : '#475569',
-                  boxShadow: activeTab === 'warranties' ? '0 2px 6px rgba(220, 38, 38, 0.3)' : 'none',
-                  '&:hover': {
-                    bgcolor: activeTab === 'warranties' ? '#B91C1C' : '#E2E8F0',
-                  },
-                }}
-              >
-                Bảo hành sản phẩm ({claims.length})
-              </Button>
+            <Stack direction="row" spacing={3}>
+              {[
+                ['orders', `Đơn hàng (${orders.length})`],
+                ['warranties', `Bảo hành sản phẩm (${claims.length})`],
+              ].map(([id, label]) => (
+                <Button
+                  key={id}
+                  disableRipple
+                  onClick={() => setActiveTab(id)}
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: 13.5,
+                    textTransform: 'none',
+                    borderRadius: 0,
+                    px: 0.5,
+                    py: 0.75,
+                    color: activeTab === id ? 'primary.main' : '#475569',
+                    borderBottom: '2px solid',
+                    borderColor: activeTab === id ? 'primary.main' : 'transparent',
+                    '&:hover': { bgcolor: 'transparent', color: 'primary.main', borderColor: 'primary.main' },
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
             </Stack>
           </Stack>
         </Box>
@@ -419,7 +400,7 @@ export const MyOrdersPage = ({ onNavigate }) => {
         {activeTab === 'warranties' && (
           <Box>
             {/* Action Bar */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#1E293B' }}>
                 Danh sách yêu cầu bảo hành đã gửi
               </Typography>

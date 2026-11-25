@@ -257,7 +257,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
 
         <Grid container spacing={3.5}>
           {/* Left Form: Address & Payment */}
-          <Grid item xs={12} md={7.5}>
+          <Grid size={{ xs: 12, md: 7.5 }}>
             <Stack spacing={3}>
               {/* Section 1: Delivery Address */}
               <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB' }}>
@@ -528,7 +528,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
           </Grid>
 
           {/* Right Summary Box */}
-          <Grid item xs={12} md={4.5}>
+          <Grid size={{ xs: 12, md: 4.5 }} sx={{ position: { md: 'sticky' }, top: 24, alignSelf: 'flex-start' }}>
             <Paper elevation={1} sx={{ p: 3, borderRadius: 3, border: '1px solid #E5E7EB', backgroundColor: '#FFFFFF' }}>
               <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>
                 Đơn hàng của bạn ({cart.items.length} món)

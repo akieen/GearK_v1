@@ -79,7 +79,7 @@ export default function VietnamAddressFields({
               sx={{
                 bgcolor: '#FFFFFF',
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 1.5,
+                  borderRadius: 0,
                   fontSize: 14,
                   minHeight: 40,
                 },
@@ -107,7 +107,7 @@ export default function VietnamAddressFields({
             popper: {
               sx: {
                 '& .MuiAutocomplete-paper': {
-                  borderRadius: 2,
+                  borderRadius: 0,
                   boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
                   mt: 0.5,
                 },
@@ -132,7 +132,7 @@ export default function VietnamAddressFields({
               sx={{
                 bgcolor: '#FFFFFF',
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 1.5,
+                  borderRadius: 0,
                   fontSize: 14,
                   minHeight: 40,
                 },
@@ -158,7 +158,7 @@ export default function VietnamAddressFields({
           sx={{
             bgcolor: '#FFFFFF',
             '& .MuiOutlinedInput-root': {
-              borderRadius: 1.5,
+              borderRadius: 0,
               fontSize: 14,
               minHeight: 40,
             },

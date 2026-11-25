@@ -788,7 +788,6 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
             <Button
               size="small"
               onClick={() => onNavigate('products')}
-              startIcon={<LocalFireDepartmentIcon sx={{ color: '#F59E0B' }} />}
               sx={{
                 fontWeight: 800,
                 color: 'primary.main',
@@ -797,7 +796,7 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                 ml: 'auto',
               }}
             >
-              Khuyến Mãi Hot
+              Tất Cả Sản Phẩm
             </Button>
           </Box>
         </Container>

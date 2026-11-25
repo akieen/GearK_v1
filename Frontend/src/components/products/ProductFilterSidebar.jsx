@@ -51,7 +51,7 @@ export const ProductFilterSidebar = ({
         elevation={1}
         sx={{
           p: 2,
-          borderRadius: 2.5,
+          borderRadius: 0,
           border: '1px solid #E5E7EB',
           backgroundColor: '#FFFFFF',
           maxHeight: { md: 'calc(100vh - 185px)' },
