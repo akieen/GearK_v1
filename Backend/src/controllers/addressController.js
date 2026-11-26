@@ -1,5 +1,5 @@
 const prisma = require('../config/prisma');
-const { successResponse, errorResponse } = require('../utils/helpers');
+const { successResponse, errorResponse, validatePhone } = require('../utils/helpers');
 
 // [GET] /api/addresses
 async function getAddresses(req, res, next) {
@@ -25,11 +25,49 @@ async function createAddress(req, res, next) {
       return errorResponse(res, 'Vui lòng điền đầy đủ họ tên người nhận, số điện thoại và địa chỉ giao hàng', 400);
     }
 
+    const cleanPhone = recipient_phone.trim();
+    const phoneValidation = validatePhone(cleanPhone);
+    if (!phoneValidation.valid) {
+      return errorResponse(res, phoneValidation.message, 400);
+    }
+
+    // 1. Kiểm tra số điện thoại không được thuộc về người dùng khác
+    const otherUser = await prisma.user.findFirst({
+      where: {
+        phone: cleanPhone,
+        user_id: { not: userId },
+      },
+    });
+    if (otherUser) {
+      return errorResponse(res, 'Số điện thoại này đã được tài khoản khác sử dụng', 409);
+    }
+
+    // 2. Quy tắc: mỗi user chỉ có duy nhất 1 số điện thoại
+    const currentUser = await prisma.user.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (currentUser?.phone) {
+      if (currentUser.phone !== cleanPhone) {
+        return errorResponse(
+          res,
+          `Mỗi tài khoản chỉ được sử dụng 1 số điện thoại duy nhất (${currentUser.phone}). Vui lòng dùng đúng số điện thoại của bạn!`,
+          400
+        );
+      }
+    } else {
+      // Nếu user chưa có số điện thoại trong hồ sơ, tự động đồng bộ số điện thoại này vào user
+      await prisma.user.update({
+        where: { user_id: userId },
+        data: { phone: cleanPhone },
+      });
+    }
+
     const newAddress = await prisma.address.create({
       data: {
         user_id: userId,
         recipient_name: recipient_name.trim(),
-        recipient_phone: recipient_phone.trim(),
+        recipient_phone: cleanPhone,
         street_address: street_address.trim(),
       },
     });
@@ -70,7 +108,48 @@ async function updateAddress(req, res, next) {
 
     const updateData = {};
     if (recipient_name !== undefined) updateData.recipient_name = recipient_name.trim();
-    if (recipient_phone !== undefined) updateData.recipient_phone = recipient_phone.trim();
+
+    if (recipient_phone !== undefined) {
+      const cleanPhone = recipient_phone.trim();
+      const phoneValidation = validatePhone(cleanPhone);
+      if (!phoneValidation.valid) {
+        return errorResponse(res, phoneValidation.message, 400);
+      }
+
+      // Kiểm tra xem số điện thoại có thuộc về user khác không
+      const otherUser = await prisma.user.findFirst({
+        where: {
+          phone: cleanPhone,
+          user_id: { not: userId },
+        },
+      });
+      if (otherUser) {
+        return errorResponse(res, 'Số điện thoại này đã được tài khoản khác sử dụng', 409);
+      }
+
+      // Quy tắc: Mỗi user chỉ dùng duy nhất 1 số điện thoại
+      const currentUser = await prisma.user.findUnique({
+        where: { user_id: userId },
+      });
+
+      if (currentUser?.phone) {
+        if (currentUser.phone !== cleanPhone) {
+          return errorResponse(
+            res,
+            `Mỗi tài khoản chỉ được sử dụng 1 số điện thoại duy nhất (${currentUser.phone}). Vui lòng dùng đúng số điện thoại của bạn!`,
+            400
+          );
+        }
+      } else {
+        await prisma.user.update({
+          where: { user_id: userId },
+          data: { phone: cleanPhone },
+        });
+      }
+
+      updateData.recipient_phone = cleanPhone;
+    }
+
     if (street_address !== undefined) updateData.street_address = street_address.trim();
 
     await prisma.address.update({

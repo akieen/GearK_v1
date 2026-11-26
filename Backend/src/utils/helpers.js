@@ -85,10 +85,48 @@ function generateSku(productName = '', variantName = '') {
   return `${prodPart}-${varPart}-${rand}`.replace(/--+/g, '-');
 }
 
+function validatePhone(phone) {
+  if (!phone || typeof phone !== 'string') {
+    return { valid: false, message: 'Vui lòng cung cấp số điện thoại' };
+  }
+  const cleanPhone = phone.trim();
+  if (/[a-zA-ZÀ-ỹ]/.test(cleanPhone)) {
+    return { valid: false, message: 'Số điện thoại không được chứa chữ cái' };
+  }
+  if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+    return { valid: false, message: 'Số điện thoại phải gồm 10 đến 11 chữ số và không chứa ký tự đặc biệt' };
+  }
+  return { valid: true, phone: cleanPhone };
+}
+
+function validatePassword(password) {
+  if (!password || typeof password !== 'string') {
+    return { valid: false, message: 'Vui lòng nhập mật khẩu' };
+  }
+  if (password.length < 9) {
+    return { valid: false, message: 'Mật khẩu phải có tối thiểu 9 ký tự' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: 'Mật khẩu phải chứa ít nhất 1 chữ cái in hoa (A-Z)' };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: 'Mật khẩu phải chứa ít nhất 1 chữ cái in thường (a-z)' };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: 'Mật khẩu phải chứa ít nhất 1 chữ số (0-9)' };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+    return { valid: false, message: 'Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*...)' };
+  }
+  return { valid: true };
+}
+
 module.exports = {
   slugify,
   generateSku,
   generateOrderCode,
   successResponse,
-  errorResponse
+  errorResponse,
+  validatePhone,
+  validatePassword
 };

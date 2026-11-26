@@ -78,9 +78,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (full_name, email, password) => {
+  const register = async (full_name, email, password, phone) => {
     try {
-      const res = await authApi.register(full_name, email, password);
+      const res = await authApi.register(full_name, email, password, phone);
       if (res.success) {
         toast.info(res.message || 'Mã OTP đã được gửi về email. Vui lòng kiểm tra và nhập mã xác thực!');
         return { success: true, requires_otp: true, email: res.data?.email || email };

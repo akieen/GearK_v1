@@ -13,10 +13,10 @@ export const authApi = {
       body: JSON.stringify({ credential }),
     }),
 
-  register: (full_name, email, password) =>
+  register: (full_name, email, password, phone) =>
     request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ full_name, email, password }),
+      body: JSON.stringify({ full_name, email, password, phone }),
     }),
 
   verifyOtp: (email, otp) =>

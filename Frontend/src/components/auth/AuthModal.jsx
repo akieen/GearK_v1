@@ -12,6 +12,7 @@ import MailOutlineIcon from '@mui/icons-material/MailOutlined';
 import KeyIcon from '@mui/icons-material/Key';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LockResetIcon from '@mui/icons-material/LockReset';
+import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
 
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -44,7 +45,7 @@ export const AuthModal = () => {
   } = useAuth();
   const toast = useToast();
 
-  const [form, setForm] = useState({ fullName: '', email: '', password: '' });
+  const [form, setForm] = useState({ fullName: '', email: '', password: '', phone: '' });
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState('input'); // 'input' | 'otp'
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +100,36 @@ export const AuthModal = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isLogin && step === 'input') {
+      // Validate phone: 10-11 số, không có chữ
+      const cleanPhone = (form.phone || '').trim();
+      if (!cleanPhone) {
+        return toast.warning('Vui lòng nhập số điện thoại');
+      }
+      if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+        return toast.warning('Số điện thoại phải từ 10-11 số và không chứa chữ hoặc ký tự khác');
+      }
+
+      // Validate password: tối thiểu 9 ký tự, gồm chữ hoa, thường, số, ký tự đặc biệt
+      const pwd = form.password || '';
+      if (pwd.length < 9) {
+        return toast.warning('Mật khẩu phải có tối thiểu 9 ký tự');
+      }
+      if (!/[A-Z]/.test(pwd)) {
+        return toast.warning('Mật khẩu phải chứa ít nhất 1 chữ hoa');
+      }
+      if (!/[a-z]/.test(pwd)) {
+        return toast.warning('Mật khẩu phải chứa ít nhất 1 chữ thường');
+      }
+      if (!/[0-9]/.test(pwd)) {
+        return toast.warning('Mật khẩu phải chứa ít nhất 1 số');
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) {
+        return toast.warning('Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%...)');
+      }
+    }
+
     setSubmitting(true);
     try {
       if (isLogin) {
@@ -106,7 +137,7 @@ export const AuthModal = () => {
       } else {
         if (step === 'input') {
           // Bấm Đăng ký -> Gửi OTP về mail
-          const res = await register(form.fullName, form.email, form.password);
+          const res = await register(form.fullName, form.email, form.password, form.phone.trim());
           if (res?.success && res?.requires_otp) {
             setStep('otp');
             setCountdown(60);
@@ -179,9 +210,24 @@ export const AuthModal = () => {
     if (!newPassword.trim()) {
       return toast.warning('Vui lòng nhập mật khẩu mới!');
     }
-    if (newPassword.trim().length < 6) {
-      return toast.warning('Mật khẩu mới phải có ít nhất 6 ký tự!');
+
+    const pwd = newPassword.trim();
+    if (pwd.length < 9) {
+      return toast.warning('Mật khẩu mới phải có tối thiểu 9 ký tự!');
     }
+    if (!/[A-Z]/.test(pwd)) {
+      return toast.warning('Mật khẩu mới phải chứa ít nhất 1 chữ hoa!');
+    }
+    if (!/[a-z]/.test(pwd)) {
+      return toast.warning('Mật khẩu mới phải chứa ít nhất 1 chữ thường!');
+    }
+    if (!/[0-9]/.test(pwd)) {
+      return toast.warning('Mật khẩu mới phải chứa ít nhất 1 số!');
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) {
+      return toast.warning('Mật khẩu mới phải chứa ít nhất 1 ký tự đặc biệt!');
+    }
+
     if (newPassword !== confirmPassword) {
       return toast.warning('Mật khẩu xác nhận không khớp với mật khẩu mới!');
     }
@@ -360,7 +406,7 @@ export const AuthModal = () => {
             <AppInput
               topLabel="Mật khẩu mới"
               type="password"
-              placeholder="Tối thiểu 6 ký tự"
+              placeholder="Tối thiểu 9 ký tự (gồm hoa, thường, số, ký tự đặc biệt)"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -485,14 +531,25 @@ export const AuthModal = () => {
           /* GIAO DIỆN NHẬP FORM ĐĂNG NHẬP / ĐĂNG KÝ BAN ĐẦU */
           <Box component="form" onSubmit={handleSubmit}>
             {!isLogin && (
-              <AppInput
-                topLabel="Họ và tên"
-                placeholder="Ví dụ: Nguyễn Văn Khách"
-                value={form.fullName}
-                onChange={handleChange('fullName')}
-                required
-                startAdornment={<PersonOutlineIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
-              />
+              <>
+                <AppInput
+                  topLabel="Họ và tên"
+                  placeholder="Ví dụ: Nguyễn Văn Khách"
+                  value={form.fullName}
+                  onChange={handleChange('fullName')}
+                  required
+                  startAdornment={<PersonOutlineIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
+                />
+                <AppInput
+                  topLabel="Số điện thoại (10 - 11 chữ số)"
+                  placeholder="Ví dụ: 0912345678"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                  required
+                  startAdornment={<PhoneIphoneIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
+                  helperText="10-11 số, không có chữ cái, mỗi tài khoản gắn với 1 số điện thoại"
+                />
+              </>
             )}
 
             <AppInput
@@ -508,11 +565,12 @@ export const AuthModal = () => {
             <AppInput
               topLabel="Mật khẩu"
               type="password"
-              placeholder="••••••••"
+              placeholder={isLogin ? "••••••••" : "Tối thiểu 9 ký tự (gồm hoa, thường, số, ký tự đặc biệt)"}
               value={form.password}
               onChange={handleChange('password')}
               required
               startAdornment={<LockOutlinedIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
+              helperText={!isLogin ? "Mật khẩu tối thiểu 9 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt" : undefined}
               sx={{ mb: isLogin ? 1 : 2.5 }}
             />
 

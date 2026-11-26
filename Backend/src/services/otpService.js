@@ -16,7 +16,7 @@ function generateOtpCode() {
 /**
  * Lưu thông tin đăng ký và mã OTP tạm thời (hiệu lực 10 phút)
  */
-function saveRegistrationOtp({ email, full_name, password_hash, role = 'customer' }) {
+function saveRegistrationOtp({ email, full_name, password_hash, role = 'customer', phone = null }) {
   const cleanEmail = email.trim().toLowerCase();
   const otp = generateOtpCode();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 phút
@@ -27,6 +27,7 @@ function saveRegistrationOtp({ email, full_name, password_hash, role = 'customer
     full_name: full_name.trim(),
     password_hash,
     role,
+    phone: phone ? phone.trim() : null,
   });
 
   return { otp, expiresAt };
@@ -117,6 +118,7 @@ function verifyOtp(email, inputOtp) {
       full_name: record.full_name,
       password_hash: record.password_hash,
       role: record.role,
+      phone: record.phone || null,
     },
   };
 }

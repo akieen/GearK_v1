@@ -1,5 +1,5 @@
 const prisma = require('../config/prisma');
-const { generateOrderCode, successResponse, errorResponse } = require('../utils/helpers');
+const { generateOrderCode, successResponse, errorResponse, validatePhone } = require('../utils/helpers');
 const { sendOrderSuccessMail } = require('../services/mailService');
 
 // Core order creation logic reusable by createOrder and VNPay payment callback
@@ -26,11 +26,52 @@ async function executeOrderCreation(tx, {
       err.status = 400;
       throw err;
     }
+
+    const cleanPhone = recipient_phone.trim();
+    const phoneValidation = validatePhone(cleanPhone);
+    if (!phoneValidation.valid) {
+      const err = new Error(phoneValidation.message);
+      err.status = 400;
+      throw err;
+    }
+
+    // Kiểm tra số điện thoại không thuộc tài khoản khác
+    const otherUser = await tx.user.findFirst({
+      where: {
+        phone: cleanPhone,
+        user_id: { not: parsedUserId },
+      },
+    });
+    if (otherUser) {
+      const err = new Error('Số điện thoại này đã được tài khoản khác sử dụng');
+      err.status = 409;
+      throw err;
+    }
+
+    // Đảm bảo 1 user chỉ dùng 1 số điện thoại duy nhất
+    const currentUser = await tx.user.findUnique({
+      where: { user_id: parsedUserId },
+    });
+    if (currentUser?.phone) {
+      if (currentUser.phone !== cleanPhone) {
+        const err = new Error(
+          `Mỗi tài khoản chỉ được sử dụng 1 số điện thoại duy nhất (${currentUser.phone}). Vui lòng dùng đúng số điện thoại của bạn!`
+        );
+        err.status = 400;
+        throw err;
+      }
+    } else {
+      await tx.user.update({
+        where: { user_id: parsedUserId },
+        data: { phone: cleanPhone },
+      });
+    }
+
     const newAddr = await tx.address.create({
       data: {
         user_id: parsedUserId,
         recipient_name: recipient_name.trim(),
-        recipient_phone: recipient_phone.trim(),
+        recipient_phone: cleanPhone,
         street_address: street_address.trim(),
       },
     });

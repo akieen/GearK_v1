@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
-const { successResponse, errorResponse } = require('../utils/helpers');
+const { successResponse, errorResponse, validatePhone, validatePassword } = require('../utils/helpers');
 const { sendOtpMail, sendPasswordResetOtpMail } = require('../services/mailService');
 const {
   saveRegistrationOtp,
@@ -25,15 +25,24 @@ function generateToken(userId, role) {
 // [POST] /api/auth/register (Gửi OTP về email)
 async function register(req, res, next) {
   try {
-    const { full_name, email, password, role = 'customer' } = req.body;
+    const { full_name, email, password, phone, role = 'customer' } = req.body;
 
-    if (!full_name || !email || !password) {
-      return errorResponse(res, 'Vui lòng cung cấp họ tên, email và mật khẩu', 400);
+    if (!full_name || !email || !password || !phone) {
+      return errorResponse(res, 'Vui lòng cung cấp đầy đủ họ tên, số điện thoại, email và mật khẩu', 400);
     }
 
-    if (password.length < 6) {
-      return errorResponse(res, 'Mật khẩu phải chứa ít nhất 6 ký tự', 400);
+    // Kiểm tra định dạng mật khẩu (tối thiểu 9 ký tự, gồm chữ hoa, thường, số, ký tự đặc biệt)
+    const pwdValidation = validatePassword(password);
+    if (!pwdValidation.valid) {
+      return errorResponse(res, pwdValidation.message, 400);
     }
+
+    // Kiểm tra số điện thoại (10 - 11 chữ số, không có chữ)
+    const phoneValidation = validatePhone(phone);
+    if (!phoneValidation.valid) {
+      return errorResponse(res, phoneValidation.message, 400);
+    }
+    const cleanPhone = phoneValidation.phone;
 
     const cleanEmail = email.trim().toLowerCase();
 
@@ -43,6 +52,14 @@ async function register(req, res, next) {
     });
     if (existing) {
       return errorResponse(res, 'Email này đã được sử dụng', 409);
+    }
+
+    // Kiểm tra mỗi user chỉ được 1 số điện thoại đó (không trùng lặp với user khác)
+    const existingPhone = await prisma.user.findFirst({
+      where: { phone: cleanPhone },
+    });
+    if (existingPhone) {
+      return errorResponse(res, 'Số điện thoại này đã được sử dụng bởi tài khoản khác', 409);
     }
 
     // Hash password
@@ -57,6 +74,7 @@ async function register(req, res, next) {
       email: cleanEmail,
       full_name: full_name.trim(),
       password_hash,
+      phone: cleanPhone,
       role: assignedRole,
     });
 
@@ -99,7 +117,7 @@ async function verifyOtpAndRegister(req, res, next) {
       return errorResponse(res, verification.message, 400);
     }
 
-    const { full_name, password_hash, role } = verification.data;
+    const { full_name, password_hash, role, phone } = verification.data;
     const cleanEmail = email.trim().toLowerCase();
 
     // Kiểm tra lại đề phòng trùng lặp trong lúc đợi xác thực
@@ -110,12 +128,22 @@ async function verifyOtpAndRegister(req, res, next) {
       return errorResponse(res, 'Email này đã được đăng ký trước đó', 409);
     }
 
+    if (phone) {
+      const existingPhone = await prisma.user.findFirst({
+        where: { phone },
+      });
+      if (existingPhone) {
+        return errorResponse(res, 'Số điện thoại này đã được đăng ký trước đó bởi tài khoản khác', 409);
+      }
+    }
+
     // Tạo user và các bảng phụ thuộc trong database transaction
     const newUser = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           full_name,
           email: cleanEmail,
+          phone: phone || null,
           password_hash,
           role,
         },
@@ -136,6 +164,7 @@ async function verifyOtpAndRegister(req, res, next) {
           user_id: newUser.user_id,
           full_name: newUser.full_name,
           email: newUser.email,
+          phone: newUser.phone || null,
           role,
         },
         token,
@@ -224,6 +253,7 @@ async function login(req, res, next) {
           user_id: user.user_id,
           full_name: user.full_name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
         },
         token,
@@ -333,6 +363,7 @@ async function googleLogin(req, res, next) {
           user_id: user.user_id,
           full_name: user.full_name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
         },
         token,
@@ -354,6 +385,7 @@ async function getProfile(req, res, next) {
         user_id: true,
         full_name: true,
         email: true,
+        phone: true,
         role: true,
         created_at: true,
         updated_at: true,
@@ -373,11 +405,18 @@ async function getProfile(req, res, next) {
 // [PUT] /api/auth/profile
 async function updateProfile(req, res, next) {
   try {
-    const { full_name, old_password, new_password } = req.body;
+    const { full_name, phone, old_password, new_password } = req.body;
     const userId = BigInt(req.user.user_id);
 
-    if (!full_name && !new_password) {
+    if (!full_name && !phone && !new_password) {
       return errorResponse(res, 'Không có dữ liệu cần cập nhật', 400);
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { user_id: userId },
+    });
+    if (!currentUser) {
+      return errorResponse(res, 'Người dùng không tồn tại', 404);
     }
 
     const updateData = {};
@@ -386,18 +425,38 @@ async function updateProfile(req, res, next) {
       if (!old_password) {
         return errorResponse(res, 'Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu', 400);
       }
-      const user = await prisma.user.findUnique({
-        where: { user_id: userId },
-      });
-      if (!user) {
-        return errorResponse(res, 'Người dùng không tồn tại', 404);
+      const passValidation = validatePassword(new_password);
+      if (!passValidation.valid) {
+        return errorResponse(res, passValidation.message, 400);
       }
-      const isMatch = await bcrypt.compare(old_password, user.password_hash);
+      const isMatch = await bcrypt.compare(old_password, currentUser.password_hash);
       if (!isMatch) {
         return errorResponse(res, 'Mật khẩu hiện tại không đúng', 400);
       }
       const salt = await bcrypt.genSalt(10);
       updateData.password_hash = await bcrypt.hash(new_password, salt);
+    }
+
+    if (phone !== undefined) {
+      const cleanPhone = phone ? phone.trim() : '';
+      if (cleanPhone) {
+        const phoneValidation = validatePhone(cleanPhone);
+        if (!phoneValidation.valid) {
+          return errorResponse(res, phoneValidation.message, 400);
+        }
+
+        // Kiểm tra xem số điện thoại đã thuộc về tài khoản khác chưa
+        const existingPhone = await prisma.user.findFirst({
+          where: {
+            phone: cleanPhone,
+            user_id: { not: userId },
+          },
+        });
+        if (existingPhone) {
+          return errorResponse(res, 'Số điện thoại này đã được sử dụng bởi một tài khoản khác', 409);
+        }
+        updateData.phone = cleanPhone;
+      }
     }
 
     if (full_name) {
@@ -411,6 +470,7 @@ async function updateProfile(req, res, next) {
         user_id: true,
         full_name: true,
         email: true,
+        phone: true,
         role: true,
         updated_at: true,
       },
@@ -496,14 +556,31 @@ async function getAllUsers(req, res, next) {
 // [POST] /api/auth/staff (Admin only)
 async function createStaff(req, res, next) {
   try {
-    const { full_name, email, password } = req.body;
+    const { full_name, email, password, phone } = req.body;
 
     if (!full_name || !email || !password) {
       return errorResponse(res, 'Vui lòng cung cấp đầy đủ họ tên, email và mật khẩu cho nhân viên', 400);
     }
 
-    if (password.length < 6) {
-      return errorResponse(res, 'Mật khẩu phải chứa ít nhất 6 ký tự', 400);
+    const passValidation = validatePassword(password);
+    if (!passValidation.valid) {
+      return errorResponse(res, passValidation.message, 400);
+    }
+
+    let cleanPhone = null;
+    if (phone && phone.trim()) {
+      cleanPhone = phone.trim();
+      const phoneValidation = validatePhone(cleanPhone);
+      if (!phoneValidation.valid) {
+        return errorResponse(res, phoneValidation.message, 400);
+      }
+
+      const existingPhone = await prisma.user.findFirst({
+        where: { phone: cleanPhone },
+      });
+      if (existingPhone) {
+        return errorResponse(res, 'Số điện thoại này đã được sử dụng bởi một tài khoản khác', 409);
+      }
     }
 
     const cleanEmail = email.trim().toLowerCase();
@@ -525,6 +602,7 @@ async function createStaff(req, res, next) {
         data: {
           full_name: full_name.trim(),
           email: cleanEmail,
+          phone: cleanPhone,
           password_hash,
           role: 'staff',
         },
@@ -543,6 +621,7 @@ async function createStaff(req, res, next) {
         user_id: newUser.user_id,
         full_name: newUser.full_name,
         email: newUser.email,
+        phone: newUser.phone,
         role: 'staff',
       },
       'Tạo tài khoản nhân viên (Staff) thành công',
@@ -762,8 +841,9 @@ async function resetPassword(req, res, next) {
       return errorResponse(res, 'Vui lòng cung cấp đầy đủ email, mã OTP và mật khẩu mới', 400);
     }
 
-    if (new_password.length < 6) {
-      return errorResponse(res, 'Mật khẩu mới phải chứa ít nhất 6 ký tự', 400);
+    const passValidation = validatePassword(new_password);
+    if (!passValidation.valid) {
+      return errorResponse(res, passValidation.message, 400);
     }
 
     const cleanEmail = email.trim().toLowerCase();

@@ -107,6 +107,17 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
       return;
     }
 
+    const cleanPhone = newRecipientPhone.trim();
+    if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.warning('Số điện thoại người nhận phải từ 10-11 số và không có chữ!');
+      return;
+    }
+
+    if (user?.phone && user.phone !== cleanPhone) {
+      toast.warning(`Mỗi tài khoản chỉ được dùng 1 số điện thoại duy nhất (${user.phone})!`);
+      return;
+    }
+
     const fullStreetAddress = vietnamAddressService.formatAddress(
       newDetailAddress,
       newWard,
@@ -117,7 +128,7 @@ export const CheckoutPage = ({ onNavigate, onOrderCompleted, initialCoupon }) =>
     try {
       const res = await addressApi.createAddress({
         recipient_name: newRecipientName.trim(),
-        recipient_phone: newRecipientPhone.trim(),
+        recipient_phone: cleanPhone,
         street_address: fullStreetAddress,
         is_default: addresses.length === 0,
       });

@@ -741,6 +741,7 @@ CREATE TABLE `users` (
   `user_id` bigint UNSIGNED NOT NULL,
   `full_name` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `phone` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `role` enum('customer','staff','admin') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'customer',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1076,7 +1077,8 @@ ALTER TABLE `suppliers`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`user_id`) USING BTREE,
-  ADD UNIQUE KEY `uq_users_email` (`email`) USING BTREE;
+  ADD UNIQUE KEY `uq_users_email` (`email`) USING BTREE,
+  ADD UNIQUE KEY `uq_users_phone` (`phone`) USING BTREE;
 
 --
 -- Indexes for table `variant_images`

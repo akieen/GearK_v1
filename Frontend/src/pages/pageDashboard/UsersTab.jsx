@@ -53,6 +53,7 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
   const [submittingStaff, setSubmittingStaff] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
@@ -90,19 +91,40 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
     if (!staffName.trim() || !staffEmail.trim() || !staffPassword.trim()) {
       return toast.warning('Vui lòng nhập đầy đủ thông tin nhân viên');
     }
-    if (staffPassword.length < 6) {
-      return toast.warning('Mật khẩu nhân viên phải chứa ít nhất 6 ký tự');
+
+    const pwd = staffPassword.trim();
+    if (pwd.length < 9) {
+      return toast.warning('Mật khẩu nhân viên phải có ít nhất 9 ký tự');
     }
+    if (!/[A-Z]/.test(pwd)) {
+      return toast.warning('Mật khẩu phải chứa ít nhất 1 chữ hoa');
+    }
+    if (!/[a-z]/.test(pwd)) {
+      return toast.warning('Mật khẩu phải chứa ít nhất 1 chữ thường');
+    }
+    if (!/[0-9]/.test(pwd)) {
+      return toast.warning('Mật khẩu phải chứa ít nhất 1 số');
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) {
+      return toast.warning('Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%...)');
+    }
+
+    const cleanPhone = staffPhone.trim();
+    if (cleanPhone && !/^[0-9]{10,11}$/.test(cleanPhone)) {
+      return toast.warning('Số điện thoại phải từ 10-11 số và không chứa chữ cái');
+    }
+
     try {
       setSubmittingStaff(true);
       const res = await authApi.createStaff({
         full_name: staffName.trim(),
         email: staffEmail.trim(),
-        password: staffPassword,
+        password: pwd,
+        phone: cleanPhone || undefined,
       });
       if (res.success) {
         toast.success(`Đã tạo tài khoản nhân viên cho "${staffName.trim()}" thành công!`);
-        setStaffName(''); setStaffEmail(''); setStaffPassword('');
+        setStaffName(''); setStaffEmail(''); setStaffPassword(''); setStaffPhone('');
         setShowAddModal(false);
         fetchUsers();
       }
@@ -400,8 +422,29 @@ export default function UsersTab({ user, isAdmin = true, toast }) {
               <TextField fullWidth size="small" type="email" required placeholder="staff@geark.vn" value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />
             </Box>
             <Box>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Số điện thoại (tùy chọn)</Typography>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Ví dụ: 0912345678 (10-11 số)"
+                value={staffPhone}
+                onChange={(e) => setStaffPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                helperText="10-11 số, duy nhất trên toàn hệ thống"
+              />
+            </Box>
+            <Box>
               <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Mật khẩu đăng nhập *</Typography>
-              <TextField fullWidth size="small" type="password" required inputProps={{ minLength: 6 }} placeholder="Tối thiểu 6 ký tự" value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} />
+              <TextField
+                fullWidth
+                size="small"
+                type="password"
+                required
+                inputProps={{ minLength: 9 }}
+                placeholder="Tối thiểu 9 ký tự (gồm hoa, thường, số, ký tự đặc biệt)"
+                value={staffPassword}
+                onChange={(e) => setStaffPassword(e.target.value)}
+                helperText="Tối thiểu 9 ký tự, gồm chữ hoa, thường, số và ký tự đặc biệt"
+              />
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>

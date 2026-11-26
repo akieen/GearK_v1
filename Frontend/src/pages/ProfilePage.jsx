@@ -29,11 +29,12 @@ export const ProfilePage = ({ onNavigate }) => {
   const toast = useToast();
 
   const [fullName, setFullName] = useState(user?.full_name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
   const [recipientName, setRecipientName] = useState('');
-  const [recipientPhone, setRecipientPhone] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState(user?.phone || '');
   const [selectedProvince, setSelectedProvince] = useState(null);
   const [selectedWard, setSelectedWard] = useState(null);
   const [detailAddress, setDetailAddress] = useState('');
@@ -45,6 +46,10 @@ export const ProfilePage = ({ onNavigate }) => {
       return;
     }
     setFullName(user.full_name || '');
+    setPhone(user.phone || '');
+    if (!recipientPhone && user.phone) {
+      setRecipientPhone(user.phone);
+    }
     loadAddresses();
   }, [user]);
 
@@ -65,9 +70,17 @@ export const ProfilePage = ({ onNavigate }) => {
       return toast.warning('Họ và tên không được để trống!');
     }
 
+    const cleanPhone = phone ? phone.trim() : '';
+    if (cleanPhone && !/^[0-9]{10,11}$/.test(cleanPhone)) {
+      return toast.warning('Số điện thoại phải từ 10-11 số và không chứa chữ hoặc ký tự khác!');
+    }
+
     setUpdatingProfile(true);
     try {
-      const res = await authApi.updateProfile({ full_name: fullName.trim() });
+      const res = await authApi.updateProfile({
+        full_name: fullName.trim(),
+        phone: cleanPhone || undefined,
+      });
       if (res.success) {
         toast.success('Cập nhật thông tin tài khoản thành công!');
         refreshProfile();
@@ -86,6 +99,17 @@ export const ProfilePage = ({ onNavigate }) => {
       return;
     }
 
+    const cleanPhone = recipientPhone.trim();
+    if (!/^[0-9]{10,11}$/.test(cleanPhone)) {
+      toast.warning('Số điện thoại người nhận phải từ 10-11 số và không có chữ!');
+      return;
+    }
+
+    if (user?.phone && user.phone !== cleanPhone) {
+      toast.warning(`Mỗi tài khoản chỉ được dùng 1 số điện thoại duy nhất (${user.phone})!`);
+      return;
+    }
+
     const fullStreetAddress = vietnamAddressService.formatAddress(
       detailAddress,
       selectedWard,
@@ -96,7 +120,7 @@ export const ProfilePage = ({ onNavigate }) => {
     try {
       const res = await addressApi.createAddress({
         recipient_name: recipientName.trim(),
-        recipient_phone: recipientPhone.trim(),
+        recipient_phone: cleanPhone,
         street_address: fullStreetAddress,
         is_default: addresses.length === 0,
       });
@@ -189,6 +213,15 @@ export const ProfilePage = ({ onNavigate }) => {
                   onChange={(e) => setFullName(e.target.value)}
                   required
                   placeholder="Nhập họ và tên..."
+                />
+
+                <AppInput
+                  topLabel="Số điện thoại tài khoản (10 - 11 chữ số)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  placeholder="Ví dụ: 0912345678"
+                  helperText="Mỗi tài khoản gắn với 1 số điện thoại duy nhất trong hệ thống"
+                  sx={{ mb: 1.5 }}
                 />
 
                 <AppInput
