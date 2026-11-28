@@ -1,36 +1,31 @@
+require('dotenv').config();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Ensure destination directory exists
-const uploadDir = path.join(__dirname, '../../public/uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Configure Cloudinary with environment variables
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-// Storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Generate safe unique filename
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const sanitizedExt = path.extname(file.originalname).toLowerCase();
-    cb(null, `img-${uniqueSuffix}${sanitizedExt}`);
+// Cloudinary storage configuration
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'geark_products',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
   },
 });
 
-// File type filter - allow only standard web images
+// File type filter - allow jpg, jpeg, png, webp
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'image/jpeg',
     'image/jpg',
     'image/png',
     'image/webp',
-    'image/gif',
-    'image/svg+xml',
-    'image/avif',
   ];
 
   if (allowedMimeTypes.includes(file.mimetype)) {
@@ -38,14 +33,14 @@ const fileFilter = (req, file, cb) => {
   } else {
     cb(
       new Error(
-        'Định dạng tệp không được hỗ trợ! Chỉ chấp nhận ảnh: JPG, PNG, WEBP, GIF, SVG, AVIF.'
+        'Định dạng tệp không được hỗ trợ! Chỉ chấp nhận ảnh: JPG, JPEG, PNG, WEBP.'
       ),
       false
     );
   }
 };
 
-// Multer upload instance
+// Multer upload instance using CloudinaryStorage
 const upload = multer({
   storage,
   fileFilter,
@@ -54,7 +49,21 @@ const upload = multer({
   },
 });
 
+// Helper to extract direct HTTPS URL from Multer/Cloudinary file object
+function getUploadedFileUrl(file) {
+  if (!file) return null;
+  if (file.path && (file.path.startsWith('http://') || file.path.startsWith('https://'))) {
+    return file.path;
+  }
+  if (file.secure_url) return file.secure_url;
+  if (file.url) return file.url;
+  if (file.path) return file.path;
+  return null;
+}
+
 module.exports = {
   upload,
-  uploadDir,
+  cloudinary,
+  storage,
+  getUploadedFileUrl,
 };

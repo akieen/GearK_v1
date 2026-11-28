@@ -37,7 +37,13 @@ router.post(
   handleUpload(upload.any()),
   productController.createProduct
 );
-router.put('/:id', verifyToken, requireRoles('admin', 'staff'), productController.updateProduct);
+router.put(
+  '/:id',
+  verifyToken,
+  requireRoles('admin', 'staff'),
+  handleUpload(upload.any()),
+  productController.updateProduct
+);
 router.delete('/:id', verifyToken, requireRoles('admin'), productController.deleteProduct);
 
 // Product images endpoints

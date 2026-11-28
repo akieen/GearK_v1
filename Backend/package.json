@@ -24,6 +24,7 @@
   "dependencies": {
     "@prisma/client": "^6.4.1",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
@@ -31,6 +32,7 @@
     "moment": "^2.31.0",
     "morgan": "^1.10.1",
     "multer": "^2.5.0",
+    "multer-storage-cloudinary": "^4.0.0",
     "mysql2": "^3.16.2",
     "nodemailer": "^10.4.0",
     "qs": "^6.17.0"

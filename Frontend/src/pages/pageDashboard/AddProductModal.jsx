@@ -144,11 +144,11 @@ export default function AddProductModal({
           </Box>
 
           <ImageUploadField
-            label="Ảnh đại diện chính (Thumbnail - Multer File Upload)"
+            label="Ảnh đại diện chính (Thumbnail - Cloudinary Upload)"
             value={newProdThumb}
             onChange={setNewProdThumb}
             multiple={false}
-            hint="Chọn tệp ảnh từ máy tính (Multer sẽ lưu vào thư mục /uploads)"
+            hint="Chọn tệp ảnh từ máy tính (Lưu trữ đám mây Cloudinary: JPG, JPEG, PNG, WEBP)"
           />
 
           <ImageUploadField
@@ -156,7 +156,7 @@ export default function AddProductModal({
             value={newProdImages}
             onChange={setNewProdImages}
             multiple={true}
-            hint="Tải lên nhiều góc chụp của sản phẩm bằng Multer"
+            hint="Tải lên nhiều góc chụp của sản phẩm lên Cloudinary"
           />
 
           <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#FAFAFA', border: '1px solid #E5E7EB' }}>
@@ -245,7 +245,7 @@ export default function AddProductModal({
                 value={newVariantImages}
                 onChange={setNewVariantImages}
                 multiple={true}
-                hint="Tải lên danh sách ảnh riêng của màu sắc/phiên bản này (Multer File Upload)"
+                hint="Tải lên danh sách ảnh riêng của màu sắc/phiên bản này lên Cloudinary"
               />
             </Box>
           </Box>

@@ -277,7 +277,7 @@ async function getProductById(req, res, next) {
 // [POST] /api/products (Admin only)
 async function createProduct(req, res, next) {
   try {
-    const {
+    let {
       product_name,
       slug,
       category_id,
@@ -288,6 +288,24 @@ async function createProduct(req, res, next) {
       variants = [],
       images = [],
     } = req.body;
+
+    // Parse JSON strings if sent via FormData
+    if (typeof variants === 'string') {
+      try { variants = JSON.parse(variants); } catch { variants = []; }
+    }
+    if (typeof images === 'string') {
+      try { images = JSON.parse(images); } catch { images = images ? [images] : []; }
+    }
+
+    // If files uploaded directly via Multer + CloudinaryStorage
+    const uploadedFiles = req.files || (req.file ? [req.file] : []);
+    const fileUrls = uploadedFiles.map((f) => f.path).filter(Boolean);
+    if (!thumbnail_url && fileUrls.length > 0) {
+      thumbnail_url = fileUrls[0];
+    }
+    if (fileUrls.length > 0) {
+      images = [...(Array.isArray(images) ? images : []), ...fileUrls];
+    }
 
     if (!product_name || !category_id) {
       return errorResponse(res, 'Vui lòng cung cấp tên sản phẩm và danh mục', 400);
@@ -421,7 +439,7 @@ async function createProduct(req, res, next) {
 async function updateProduct(req, res, next) {
   try {
     const productId = BigInt(req.params.id);
-    const {
+    let {
       product_name,
       slug,
       category_id,
@@ -430,6 +448,12 @@ async function updateProduct(req, res, next) {
       thumbnail_url,
       status,
     } = req.body;
+
+    if (req.file?.path) {
+      thumbnail_url = req.file.path;
+    } else if (req.files && req.files.length > 0 && req.files[0].path) {
+      thumbnail_url = req.files[0].path;
+    }
 
     const existing = await prisma.product.findUnique({
       where: { product_id: productId },
@@ -604,9 +628,9 @@ async function addProductImage(req, res, next) {
     const productId = BigInt(req.params.id);
     let imageUrl = req.body?.image_url;
     if (req.file) {
-      imageUrl = `/uploads/${req.file.filename}`;
+      imageUrl = req.file.path;
     } else if (req.files && req.files.length > 0) {
-      imageUrl = `/uploads/${req.files[0].filename}`;
+      imageUrl = req.files[0].path;
     }
 
     if (!imageUrl) {

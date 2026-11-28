@@ -222,11 +222,11 @@ export default function EditProductModal({
           </Box>
 
           <ImageUploadField
-            label="Ảnh đại diện (Thumbnail - Multer File Upload)"
+            label="Ảnh đại diện (Thumbnail - Cloudinary Upload)"
             value={thumbnailUrl}
             onChange={setThumbnailUrl}
             multiple={false}
-            hint="Chọn ảnh từ máy tính (Multer) hoặc nhập URL"
+            hint="Chọn ảnh từ máy tính (Cloudinary) hoặc nhập URL"
           />
 
           <Box>

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { upload } = require('../middlewares/upload');
+const { upload, getUploadedFileUrl } = require('../middlewares/upload');
 const { verifyToken } = require('../middlewares/auth');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
@@ -32,7 +32,7 @@ router.post(
       return errorResponse(res, 'Vui lòng chọn ít nhất một tệp ảnh để tải lên', 400);
     }
 
-    const uploadedUrls = req.files.map((f) => `/uploads/${f.filename}`);
+    const uploadedUrls = req.files.map((f) => getUploadedFileUrl(f)).filter(Boolean);
     const primaryUrl = uploadedUrls[0];
 
     const fileDetails = req.files.map((f) => ({
@@ -40,7 +40,7 @@ router.post(
       original_name: f.originalname,
       size: f.size,
       mimetype: f.mimetype,
-      url: `/uploads/${f.filename}`,
+      url: getUploadedFileUrl(f),
     }));
 
     return successResponse(
@@ -67,7 +67,7 @@ router.post(
       return errorResponse(res, 'Vui lòng chọn ảnh để tải lên', 400);
     }
 
-    const uploadedUrls = req.files.map((f) => `/uploads/${f.filename}`);
+    const uploadedUrls = req.files.map((f) => getUploadedFileUrl(f)).filter(Boolean);
     return successResponse(
       res,
       {

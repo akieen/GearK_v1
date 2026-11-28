@@ -21,7 +21,7 @@ export default function ImageUploadField({
   onChange,
   multiple = false,
   placeholder = 'Chọn tệp ảnh từ máy tính hoặc dán URL...',
-  hint = 'Hỗ trợ: JPG, PNG, WEBP, GIF, SVG (Tối đa 10MB)',
+  hint = 'Hỗ trợ: JPG, JPEG, PNG, WEBP (Tối đa 10MB - Lưu trữ Cloudinary)',
 }) {
   const toast = useToast();
   const fileInputRef = useRef(null);
@@ -62,7 +62,7 @@ export default function ImageUploadField({
         }
       }
     } catch (err) {
-      toast.error(err.message || 'Lỗi khi tải ảnh lên bằng Multer');
+      toast.error(err.message || 'Lỗi khi tải ảnh lên Cloudinary');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -181,7 +181,7 @@ export default function ImageUploadField({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+          accept="image/jpeg,image/jpg,image/png,image/webp"
           multiple={multiple}
           style={{ display: 'none' }}
           onChange={(e) => handleFiles(e.target.files)}

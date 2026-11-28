@@ -206,7 +206,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
       toast.success(`Đã thêm ${files.length} ảnh cho biến thể thành công!`);
       await refreshManagedVariant(managingVariantImages.variant_id);
     } catch (err) {
-      toast.error(err.message || 'Lỗi khi tải ảnh biến thể lên bằng Multer');
+      toast.error(err.message || 'Lỗi khi tải ảnh biến thể lên Cloudinary');
     } finally {
       setUploadingVariantImg(false);
       if (variantFileInputRef.current) variantFileInputRef.current.value = '';
@@ -669,7 +669,7 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
             <input
               ref={variantFileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
               multiple
               style={{ display: 'none' }}
               onChange={(e) => handleAddImagesToVariant(e.target.files)}
@@ -678,10 +678,10 @@ export default function VariantsTab({ products, formatPrice, isAdmin, Icons, tar
               {uploadingVariantImg ? <CircularProgress size={18} /> : <CloudUploadIcon />}
             </Box>
             <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
-              {uploadingVariantImg ? 'Đang tải ảnh lên server bằng Multer...' : 'Tải lên ảnh mới cho biến thể này'}
+              {uploadingVariantImg ? 'Đang tải ảnh lên Cloudinary...' : 'Tải lên ảnh mới cho biến thể này'}
             </Typography>
             <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mt: 0.25, mb: 1.5 }}>
-              Hỗ trợ: JPG, PNG, WEBP, GIF, SVG (Tối đa 10MB/ảnh)
+              Hỗ trợ: JPG, JPEG, PNG, WEBP (Tối đa 10MB/ảnh - Cloudinary)
             </Typography>
 
             <Stack direction="row" justifyContent="center" spacing={1} flexWrap="wrap">

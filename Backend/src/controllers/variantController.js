@@ -39,9 +39,9 @@ async function addVariant(req, res, next) {
       }
     }
 
-    // If files uploaded via multer
+    // If files uploaded via multer (CloudinaryStorage provides full HTTPS URL in f.path)
     const uploadedFiles = req.files || (req.file ? [req.file] : []);
-    const fileUrls = uploadedFiles.map((f) => `/uploads/${f.filename}`);
+    const fileUrls = uploadedFiles.map((f) => f.path).filter(Boolean);
     const allImages = [...(Array.isArray(images) ? images : (images ? [images] : [])), ...fileUrls];
 
     let finalSku = (sku && typeof sku === 'string' && sku.trim()) ? sku.trim().toUpperCase() : null;
@@ -204,9 +204,9 @@ async function addVariantImage(req, res, next) {
     const variantId = BigInt(req.params.variantId);
     let imageUrl = req.body?.image_url;
     if (req.file) {
-      imageUrl = `/uploads/${req.file.filename}`;
+      imageUrl = req.file.path;
     } else if (req.files && req.files.length > 0) {
-      imageUrl = `/uploads/${req.files[0].filename}`;
+      imageUrl = req.files[0].path;
     }
 
     if (!imageUrl) {
