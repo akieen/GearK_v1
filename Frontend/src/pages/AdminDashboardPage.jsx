@@ -598,15 +598,8 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
 
       {/* Main Content (Thu gọn padding 20%) */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowY: 'auto' }}>
-        <Stack component="header" direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, py: 1.75, gap: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.25}>
-            <IconButton title="Thông báo" sx={iconPillSx}>
-              <Badge badgeContent={5} color="error"><NotificationsNoneOutlinedIcon sx={{ fontSize: 18 }} /></Badge>
-            </IconButton>
-            <IconButton title="Cài đặt" sx={iconPillSx}>
-              <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-
+        <Stack component="header" direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.75, gap: 2 }}>
+          <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1.25}>
             {/* Điều khiển tỉ lệ hiển thị Dashboard (UI Scaling: 80% [mặc định giảm 20%], 90%, 100%) */}
             <Paper
               elevation={0}
@@ -652,24 +645,11 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
                 </Button>
               ))}
             </Paper>
-
-            <Paper elevation={0} sx={{ px: 1.5, py: 0.6, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 0.6, cursor: 'pointer', color: '#64748B' }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 700 }}>EN</Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
-            </Paper>
           </Stack>
-
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', px: 2, py: 0.6, width: 220, borderRadius: 99, border: '1px solid #EEF2F6' }}>
-              <InputBase placeholder="Search" sx={{ fontSize: 12.5, width: '100%' }} />
-              <SearchIcon sx={{ fontSize: 17, color: '#94A3B8' }} />
-            </Paper>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ cursor: 'pointer' }}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
-                Hello, <strong>{user?.full_name || 'Jason Doe'}</strong>
-              </Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 15, color: '#94A3B8' }} />
-            </Stack>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 'auto', cursor: 'pointer' }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
+              Hello, <strong>{user?.full_name || 'Jason Doe'}</strong>
+            </Typography>
           </Stack>
         </Stack>
 
@@ -677,14 +657,10 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
             <Box>
               <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.3px' }}>
-                Good Morning {user?.full_name ? user.full_name.split(' ').slice(-1)[0] : 'Jason'}!
+                 {user?.full_name ? user.full_name.split(' ').slice(-1)[0] : 'Jason'}!
               </Typography>
               <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', mt: 0.25 }}>Dashboard</Typography>
             </Box>
-            <Paper elevation={0} sx={{ px: 1.75, py: 0.75, borderRadius: 5, border: '1px solid #EEF2F6', display: 'flex', alignItems: 'center', gap: 0.75, color: '#64748B', cursor: 'pointer' }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 700 }}>Aug 23</Typography>
-              <KeyboardArrowDownIcon sx={{ fontSize: 15 }} />
-            </Paper>
           </Stack>
 
           {activeTab === 'stats' && <StatsTab stats={stats} loadingStats={loadingStats} formatPrice={formatPrice} formatDate={formatDate} getOrderStatusText={getOrderStatusText} Icons={Icons} />}

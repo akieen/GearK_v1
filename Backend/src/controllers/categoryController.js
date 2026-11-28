@@ -15,18 +15,35 @@ async function getCategories(req, res, next) {
         _count: {
           select: { products: true },
         },
+        products: {
+          where: { status: 'active' },
+          select: {
+            brand: {
+              select: { brand_id: true, brand_name: true, slug: true },
+            },
+          },
+        },
       },
     });
 
-    const formatted = categories.map((c) => ({
-      category_id: c.category_id,
-      parent_id: c.parent_id,
-      category_name: c.category_name,
-      slug: c.slug,
-      created_at: c.created_at,
-      updated_at: c.updated_at,
-      product_count: c._count.products,
-    }));
+    const formatted = categories.map((c) => {
+      const brandMap = new Map();
+      (c.products || []).forEach((p) => {
+        if (p.brand && !brandMap.has(p.brand.brand_id)) {
+          brandMap.set(p.brand.brand_id, p.brand);
+        }
+      });
+      return {
+        category_id: c.category_id,
+        parent_id: c.parent_id,
+        category_name: c.category_name,
+        slug: c.slug,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        product_count: c._count.products,
+        brands: Array.from(brandMap.values()),
+      };
+    });
 
     if (tree === 'true') {
       const map = {};

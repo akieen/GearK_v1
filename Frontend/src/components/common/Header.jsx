@@ -51,7 +51,7 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
   // Category Mega Menu State
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [treeCategories, setTreeCategories] = useState([]);
-  const [brandsList, setBrandsList] = useState([]);
+  const [categoryBrandsMap, setCategoryBrandsMap] = useState({});
   const [activeCategoryId, setActiveCategoryId] = useState(null);
 
   // User menu anchor
@@ -92,9 +92,9 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
     let isMounted = true;
     const fetchDropdownData = async () => {
       try {
-        const [catRes, brandRes] = await Promise.all([
+        const [catRes, prodRes] = await Promise.all([
           categoryApi.getCategories(true),
-          brandApi.getBrands(),
+          productApi.getProducts({ limit: 200 }),
         ]);
 
         if (isMounted) {
@@ -106,8 +106,20 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
             setActiveCategoryId((prev) => prev || categories[0].category_id);
           }
 
-          if (brandRes.success && Array.isArray(brandRes.data)) {
-            setBrandsList(brandRes.data);
+          if (prodRes.success && Array.isArray(prodRes.data?.items)) {
+            const map = {};
+            prodRes.data.items.forEach((p) => {
+              if (!p.category_id || !p.brand_id || !p.brand_name) return;
+              if (!map[p.category_id]) map[p.category_id] = [];
+              if (!map[p.category_id].some((b) => b.brand_id === p.brand_id)) {
+                map[p.category_id].push({
+                  brand_id: p.brand_id,
+                  brand_name: p.brand_name,
+                  slug: p.brand_slug,
+                });
+              }
+            });
+            setCategoryBrandsMap(map);
           }
         }
       } catch (err) {
@@ -136,6 +148,12 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
 
   const activeCategory =
     treeCategories.find((c) => c.category_id === activeCategoryId) || treeCategories[0];
+
+  const activeCategoryBrands = activeCategory
+    ? (Array.isArray(activeCategory.brands) && activeCategory.brands.length > 0
+        ? activeCategory.brands
+        : categoryBrandsMap[activeCategory.category_id] || [])
+    : [];
 
   const handleCategoryClick = (slug) => {
     setIsCategoryMenuOpen(false);
@@ -421,14 +439,14 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                           </Button>
                         </Box>
 
-                        {/* Brands list */}
-                        {brandsList.length > 0 && (
-                          <Box sx={{ mb: 2.5 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 1, display: 'block' }}>
-                              Thương hiệu nổi bật
-                            </Typography>
+                        {/* Brands list for active category */}
+                        <Box sx={{ mb: 2.5 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 1, display: 'block' }}>
+                            Thương hiệu nổi bật
+                          </Typography>
+                          {activeCategoryBrands.length > 0 ? (
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                              {brandsList.slice(0, 10).map((brand) => (
+                              {activeCategoryBrands.map((brand) => (
                                 <Chip
                                   key={brand.brand_id}
                                   label={brand.brand_name}
@@ -443,8 +461,12 @@ export const Header = ({ onNavigate, currentRoute, categories = [] }) => {
                                 />
                               ))}
                             </Box>
-                          </Box>
-                        )}
+                          ) : (
+                            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                              Chưa có thương hiệu nào trong danh mục này
+                            </Typography>
+                          )}
+                        </Box>
 
                         {/* Price presets */}
                         <Box sx={{ mb: 2 }}>

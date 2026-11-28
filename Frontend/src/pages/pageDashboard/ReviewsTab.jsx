@@ -137,7 +137,7 @@ export default function ReviewsTab({ isAdmin = true, formatPrice }) {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5} sx={{ mb: 2.5 }}>
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2.5 }}>
         <Box>
           <Typography sx={{ fontSize: 20, fontWeight: 900 }}>⭐ Đánh giá sản phẩm của khách hàng</Typography>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5 }}>
