@@ -516,7 +516,7 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
             <FlagOutlinedIcon sx={{ fontSize: 18 }} />
           </Box>
           <Typography sx={{ fontSize: 17, fontWeight: 800, color: '#1E293B', letterSpacing: '-0.3px' }}>
-            GearK Dash
+            GearK DashBoard
           </Typography>
         </Stack>
 
@@ -665,10 +665,6 @@ export const AdminDashboardPage = ({ onNavigate, currentTab }) => {
               <SearchIcon sx={{ fontSize: 17, color: '#94A3B8' }} />
             </Paper>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ cursor: 'pointer' }}>
-              <Avatar
-                src={user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-                sx={{ width: 32, height: 32, border: '2px solid #E2E8F0' }}
-              />
               <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
                 Hello, <strong>{user?.full_name || 'Jason Doe'}</strong>
               </Typography>
